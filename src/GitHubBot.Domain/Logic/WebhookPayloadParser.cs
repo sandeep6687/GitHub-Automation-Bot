@@ -27,6 +27,7 @@ public static class WebhookPayloadParser
             string? author = null;
             var labels = new List<string>();
             int? issueOrPrNumber = null;
+            string? htmlUrl = null;
 
             // 1. Issues event
             if (eventType.StartsWith("issues", StringComparison.OrdinalIgnoreCase))
@@ -36,6 +37,11 @@ public static class WebhookPayloadParser
                     if (issue.TryGetProperty("number", out var numProp) && numProp.TryGetInt32(out var num))
                     {
                         issueOrPrNumber = num;
+                    }
+
+                    if (issue.TryGetProperty("html_url", out var urlProp) && urlProp.ValueKind == JsonValueKind.String)
+                    {
+                        htmlUrl = urlProp.GetString();
                     }
 
                     if (issue.TryGetProperty("title", out var titleProp) && titleProp.ValueKind == JsonValueKind.String)
@@ -79,6 +85,11 @@ public static class WebhookPayloadParser
                         issueOrPrNumber = num;
                     }
 
+                    if (pr.TryGetProperty("html_url", out var urlProp) && urlProp.ValueKind == JsonValueKind.String)
+                    {
+                        htmlUrl = urlProp.GetString();
+                    }
+
                     if (pr.TryGetProperty("title", out var titleProp) && titleProp.ValueKind == JsonValueKind.String)
                     {
                         title = titleProp.GetString();
@@ -117,7 +128,8 @@ public static class WebhookPayloadParser
                 Author = author,
                 Labels = labels,
                 Action = action,
-                IssueOrPrNumber = issueOrPrNumber
+                IssueOrPrNumber = issueOrPrNumber,
+                HtmlUrl = htmlUrl
             };
         }
         catch (JsonException)

@@ -35,10 +35,14 @@ builder.Services.AddScoped<IActionExecutionRepository, ActionExecutionRepository
 builder.Services.AddHttpClient<IGitHubOAuthClient, GitHubOAuthClient>();
 builder.Services.AddHttpClient<IGitHubApiClient, GitHubApiClient>();
 builder.Services.AddScoped<IGitHubTokenProvider, GitHubTokenProvider>();
+builder.Services.Configure<GitHubBot.Application.Configuration.SlackOptions>(
+    builder.Configuration.GetSection(GitHubBot.Application.Configuration.SlackOptions.SectionName));
+builder.Services.AddHttpClient<ISlackApiClient, SlackApiClient>();
 
 // 5. Action Handlers & Dispatcher
 builder.Services.AddScoped<IActionHandler, GitHubLabelActionHandler>();
 builder.Services.AddScoped<IActionHandler, GitHubCommentActionHandler>();
+builder.Services.AddScoped<IActionHandler, SlackNotificationActionHandler>();
 builder.Services.AddScoped<IActionDispatcher, ActionDispatcher>();
 
 // 6. Application Services & Rule Engine

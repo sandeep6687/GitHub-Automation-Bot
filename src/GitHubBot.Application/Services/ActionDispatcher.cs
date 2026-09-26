@@ -51,7 +51,7 @@ public class ActionDispatcher : IActionDispatcher
         }
 
         // 2. Resolve matching action handler
-        var handler = _handlers.FirstOrDefault(h => h.ActionType == ruleAction.ActionType);
+        var handler = _handlers.FirstOrDefault(h => h.CanHandle(ruleAction.ActionType) || h.ActionType == ruleAction.ActionType);
         if (handler == null)
         {
             var errorMessage = $"Unknown or unsupported action type: {ruleAction.ActionType}";
