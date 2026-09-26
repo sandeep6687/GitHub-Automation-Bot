@@ -102,21 +102,7 @@ public class AuthController : ControllerBase
             if (Request.Headers.Accept.Any(a => a?.Contains("text/html") == true))
             {
                 var frontendUrl = _configuration.GetValue<string>("FrontendUrl") ?? "http://localhost:5173";
-                var html = $@"<!DOCTYPE html>
-<html>
-<head>
-    <meta http-equiv=""refresh"" content=""0;url={frontendUrl}"" />
-    <title>Signing you in...</title>
-    <script>window.location.href = '{frontendUrl}';</script>
-</head>
-<body style=""font-family: sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;"">
-    <div style=""text-align: center;"">
-        <h2>Signing you in as {userProfile.Login}...</h2>
-        <p>Redirecting to dashboard...</p>
-    </div>
-</body>
-</html>";
-                return Content(html, "text/html");
+                return Redirect(frontendUrl);
             }
 
             return Ok(userProfile);
