@@ -105,16 +105,11 @@ public class WebhookController : ControllerBase
                 return Unauthorized(new { error = "Invalid signature." });
 
             case WebhookIngestionStatus.RepositoryNotFound:
-                _logger.LogWarning(
-                    "Webhook target repository not found. CorrelationId: {CorrelationId}, DeliveryId: {DeliveryId}",
-                    correlationId, deliveryId);
-                return NotFound(new { error = result.ErrorMessage });
-
             case WebhookIngestionStatus.RepositoryInactive:
                 _logger.LogWarning(
-                    "Webhook target repository is inactive. CorrelationId: {CorrelationId}, DeliveryId: {DeliveryId}",
+                    "Webhook authentication failed (unknown or inactive repository). CorrelationId: {CorrelationId}, DeliveryId: {DeliveryId}",
                     correlationId, deliveryId);
-                return BadRequest(new { error = result.ErrorMessage });
+                return Unauthorized(new { error = "Unauthorized." });
 
             case WebhookIngestionStatus.MalformedPayload:
             case WebhookIngestionStatus.MissingHeader:

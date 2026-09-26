@@ -225,7 +225,7 @@ public class WebhookIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     }
 
     [Fact]
-    public async Task PostWebhook_UnknownRepository_ShouldReturn404NotFound()
+    public async Task PostWebhook_UnknownRepository_ShouldReturn401Unauthorized()
     {
         const long unknownRepoId = 999999;
         const string payload = "{\"action\":\"opened\",\"repository\":{\"id\":999999,\"full_name\":\"unknown/repo\"}}";
@@ -247,6 +247,39 @@ public class WebhookIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var request = CreateWebhookRequest("issues", "deliv-unknown-repo", payload, signature);
         var response = await client.SendAsync(request);
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task PostWebhook_InactiveRepository_ShouldReturn401Unauthorized()
+    {
+        const long inactiveRepoId = 888888;
+        const string payload = "{\"action\":\"opened\",\"repository\":{\"id\":888888,\"full_name\":\"inactive/repo\"}}";
+        var signature = ComputeSignature(RawSecret, payload);
+
+        var mockConnectedRepo = new Mock<IConnectedRepositoryRepository>();
+        mockConnectedRepo
+            .Setup(r => r.FindByGithubRepositoryIdAsync(inactiveRepoId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectedRepository
+            {
+                Id = Guid.NewGuid(),
+                GithubRepositoryId = inactiveRepoId,
+                FullName = "inactive/repo",
+                EncryptedWebhookSecret = EncryptedSecret,
+                IsActive = false
+            });
+
+        var client = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddScoped(_ => mockConnectedRepo.Object);
+            });
+        }).CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var request = CreateWebhookRequest("issues", "deliv-inactive-repo", payload, signature);
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }
