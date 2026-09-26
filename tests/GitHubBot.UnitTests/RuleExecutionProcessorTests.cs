@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using GitHubBot.Application.Interfaces;
 using GitHubBot.Application.Services;
 using GitHubBot.Domain.Entities;
 using GitHubBot.Domain.Enums;
@@ -12,6 +13,8 @@ namespace GitHubBot.UnitTests;
 public class RuleExecutionProcessorTests
 {
     private readonly Mock<IRuleRepository> _ruleRepoMock;
+    private readonly Mock<IActionDispatcher> _actionDispatcherMock;
+    private readonly Mock<IConnectedRepositoryRepository> _connectedRepoMock;
     private readonly RuleEngine _ruleEngine;
     private readonly RuleExecutionProcessor _processor;
     private readonly Guid _repoId = Guid.NewGuid();
@@ -19,8 +22,33 @@ public class RuleExecutionProcessorTests
     public RuleExecutionProcessorTests()
     {
         _ruleRepoMock = new Mock<IRuleRepository>();
+        _actionDispatcherMock = new Mock<IActionDispatcher>();
+        _connectedRepoMock = new Mock<IConnectedRepositoryRepository>();
         _ruleEngine = new RuleEngine();
-        _processor = new RuleExecutionProcessor(_ruleRepoMock.Object, _ruleEngine);
+
+        _connectedRepoMock
+            .Setup(r => r.GetByIdAsync(_repoId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectedRepository
+            {
+                Id = _repoId,
+                Owner = "test-owner",
+                Name = "test-repo"
+            });
+
+        _actionDispatcherMock
+            .Setup(d => d.DispatchActionAsync(
+                It.IsAny<WebhookEvent>(),
+                It.IsAny<RuleAction>(),
+                It.IsAny<ConnectedRepository>(),
+                It.IsAny<int?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GitHubBot.Application.DTOs.Actions.ActionExecutionResult.Succeeded(new ActionExecution()));
+
+        _processor = new RuleExecutionProcessor(
+            _ruleRepoMock.Object,
+            _ruleEngine,
+            _actionDispatcherMock.Object,
+            _connectedRepoMock.Object);
     }
 
     [Fact]

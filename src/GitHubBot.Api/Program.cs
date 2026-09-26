@@ -2,6 +2,7 @@ using GitHubBot.Application.Interfaces;
 using GitHubBot.Application.Services;
 using GitHubBot.Domain.Interfaces;
 using GitHubBot.Domain.Logic;
+using GitHubBot.Infrastructure.ActionHandlers;
 using GitHubBot.Infrastructure.BackgroundWorkers;
 using GitHubBot.Infrastructure.ExternalServices;
 using GitHubBot.Infrastructure.Persistence;
@@ -28,12 +29,19 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IConnectedRepositoryRepository, ConnectedRepositoryRepository>();
 builder.Services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
 builder.Services.AddScoped<IRuleRepository, RuleRepository>();
+builder.Services.AddScoped<IActionExecutionRepository, ActionExecutionRepository>();
 
 // 4. External Clients
 builder.Services.AddHttpClient<IGitHubOAuthClient, GitHubOAuthClient>();
 builder.Services.AddHttpClient<IGitHubApiClient, GitHubApiClient>();
+builder.Services.AddScoped<IGitHubTokenProvider, GitHubTokenProvider>();
 
-// 5. Application Services & Rule Engine
+// 5. Action Handlers & Dispatcher
+builder.Services.AddScoped<IActionHandler, GitHubLabelActionHandler>();
+builder.Services.AddScoped<IActionHandler, GitHubCommentActionHandler>();
+builder.Services.AddScoped<IActionDispatcher, ActionDispatcher>();
+
+// 6. Application Services & Rule Engine
 builder.Services.AddSingleton<RuleEngine>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IWebhookSignatureValidator, WebhookSignatureValidator>();

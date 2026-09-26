@@ -26,12 +26,18 @@ public static class WebhookPayloadParser
             string? title = null;
             string? author = null;
             var labels = new List<string>();
+            int? issueOrPrNumber = null;
 
             // 1. Issues event
             if (eventType.StartsWith("issues", StringComparison.OrdinalIgnoreCase))
             {
                 if (root.TryGetProperty("issue", out var issue) && issue.ValueKind == JsonValueKind.Object)
                 {
+                    if (issue.TryGetProperty("number", out var numProp) && numProp.TryGetInt32(out var num))
+                    {
+                        issueOrPrNumber = num;
+                    }
+
                     if (issue.TryGetProperty("title", out var titleProp) && titleProp.ValueKind == JsonValueKind.String)
                     {
                         title = titleProp.GetString();
@@ -68,6 +74,11 @@ public static class WebhookPayloadParser
             {
                 if (root.TryGetProperty("pull_request", out var pr) && pr.ValueKind == JsonValueKind.Object)
                 {
+                    if (pr.TryGetProperty("number", out var numProp) && numProp.TryGetInt32(out var num))
+                    {
+                        issueOrPrNumber = num;
+                    }
+
                     if (pr.TryGetProperty("title", out var titleProp) && titleProp.ValueKind == JsonValueKind.String)
                     {
                         title = titleProp.GetString();
@@ -105,7 +116,8 @@ public static class WebhookPayloadParser
                 Title = title,
                 Author = author,
                 Labels = labels,
-                Action = action
+                Action = action,
+                IssueOrPrNumber = issueOrPrNumber
             };
         }
         catch (JsonException)
@@ -113,5 +125,10 @@ public static class WebhookPayloadParser
             // Malformed JSON returns empty data without crashing
             return new WebhookPayloadData();
         }
+    }
+
+    public static int? ExtractIssueOrPrNumber(string? rawJson, string eventType)
+    {
+        return Parse(rawJson, eventType).IssueOrPrNumber;
     }
 }

@@ -4,6 +4,7 @@ using GitHubBot.Application.Services;
 using GitHubBot.Domain.Entities;
 using GitHubBot.Domain.Enums;
 using GitHubBot.Domain.Logic;
+using Moq;
 using GitHubBot.Infrastructure.Persistence;
 using GitHubBot.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -121,7 +122,17 @@ public class RuleEngineIntegrationTests : IAsyncLifetime
         var ruleRepo = new RuleRepository(testContext);
         var eventRepo = new WebhookEventRepository(testContext);
         var ruleEngine = new RuleEngine();
-        var processor = new RuleExecutionProcessor(ruleRepo, ruleEngine);
+        var connectedRepo = new ConnectedRepositoryRepository(testContext);
+        var actionDispatcherMock = new Moq.Mock<GitHubBot.Application.Interfaces.IActionDispatcher>();
+        actionDispatcherMock
+            .Setup(d => d.DispatchActionAsync(
+                Moq.It.IsAny<WebhookEvent>(),
+                Moq.It.IsAny<RuleAction>(),
+                Moq.It.IsAny<ConnectedRepository>(),
+                Moq.It.IsAny<int?>(),
+                Moq.It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GitHubBot.Application.DTOs.Actions.ActionExecutionResult.Succeeded(new ActionExecution()));
+        var processor = new RuleExecutionProcessor(ruleRepo, ruleEngine, actionDispatcherMock.Object, connectedRepo);
         var eventProcessingService = new EventProcessingService(eventRepo, processor);
 
         var claimedEvents = await eventRepo.ClaimBatchAsync(10);

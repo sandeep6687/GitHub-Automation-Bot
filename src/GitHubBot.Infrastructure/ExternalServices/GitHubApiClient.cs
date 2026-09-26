@@ -2,7 +2,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GitHubBot.Application.DTOs.GitHub;
 using GitHubBot.Application.DTOs.Repository;
+using GitHubBot.Application.Exceptions;
 using GitHubBot.Application.Interfaces;
 
 namespace GitHubBot.Infrastructure.ExternalServices;
@@ -160,6 +162,117 @@ public class GitHubApiClient : IGitHubApiClient
         }
     }
 
+    public async Task<IReadOnlyList<string>> AddLabelsAsync(
+        string accessToken,
+        string owner,
+        string repo,
+        int issueOrPrNumber,
+        IReadOnlyList<string> labels,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"https://api.github.com/repos/{owner}/{repo}/issues/{issueOrPrNumber}/labels");
+        SetAuthHeader(request, accessToken);
+        request.Content = JsonContent.Create(new { labels });
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessStatusCodeAsync(response, $"adding labels to {owner}/{repo}#{issueOrPrNumber}", cancellationToken);
+
+        var labelModels = await response.Content.ReadFromJsonAsync<List<GitHubLabelResponseModel>>(
+            cancellationToken: cancellationToken);
+
+        return labelModels?.Select(l => l.Name).ToList() ?? labels.ToList();
+    }
+
+    public async Task<GitHubCommentDto> AddCommentAsync(
+        string accessToken,
+        string owner,
+        string repo,
+        int issueOrPrNumber,
+        string commentBody,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"https://api.github.com/repos/{owner}/{repo}/issues/{issueOrPrNumber}/comments");
+        SetAuthHeader(request, accessToken);
+        request.Content = JsonContent.Create(new { body = commentBody });
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessStatusCodeAsync(response, $"adding comment to {owner}/{repo}#{issueOrPrNumber}", cancellationToken);
+
+        var comment = await response.Content.ReadFromJsonAsync<GitHubCommentDto>(
+            cancellationToken: cancellationToken);
+
+        return comment ?? new GitHubCommentDto { Body = commentBody };
+    }
+
+    public async Task<IReadOnlyList<GitHubCommentDto>> GetIssueCommentsAsync(
+        string accessToken,
+        string owner,
+        string repo,
+        int issueOrPrNumber,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"https://api.github.com/repos/{owner}/{repo}/issues/{issueOrPrNumber}/comments?per_page=100");
+        SetAuthHeader(request, accessToken);
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessStatusCodeAsync(response, $"getting comments for {owner}/{repo}#{issueOrPrNumber}", cancellationToken);
+
+        var comments = await response.Content.ReadFromJsonAsync<List<GitHubCommentDto>>(
+            cancellationToken: cancellationToken);
+
+        return comments ?? new List<GitHubCommentDto>();
+    }
+
+    private static async Task EnsureSuccessStatusCodeAsync(
+        HttpResponseMessage response,
+        string operation,
+        CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var statusCode = response.StatusCode;
+        string? errorBody = null;
+        try
+        {
+            errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        }
+        catch
+        {
+            // Ignore response read errors
+        }
+
+        var message = statusCode switch
+        {
+            System.Net.HttpStatusCode.Unauthorized =>
+                "GitHub API authentication failed (401). Access token is invalid or expired.",
+            System.Net.HttpStatusCode.Forbidden =>
+                "GitHub API access forbidden (403). Insufficient permissions or rate limit exceeded.",
+            System.Net.HttpStatusCode.NotFound =>
+                $"GitHub API resource not found (404) during {operation}.",
+            System.Net.HttpStatusCode.Conflict =>
+                $"GitHub API resource conflict (409) during {operation}.",
+            (System.Net.HttpStatusCode)429 =>
+                "GitHub API rate limit exceeded (429).",
+            System.Net.HttpStatusCode.InternalServerError or
+            System.Net.HttpStatusCode.BadGateway or
+            System.Net.HttpStatusCode.ServiceUnavailable or
+            System.Net.HttpStatusCode.GatewayTimeout =>
+                $"GitHub API server error ({(int)statusCode}) during {operation}.",
+            _ => $"GitHub API request failed with status code {statusCode} during {operation}."
+        };
+
+        throw new GitHubApiException(statusCode, message, errorBody);
+    }
+
     private class GitHubRepoModel
     {
         [JsonPropertyName("id")]
@@ -191,5 +304,11 @@ public class GitHubApiClient : IGitHubApiClient
     {
         [JsonPropertyName("id")]
         public long Id { get; set; }
+    }
+
+    private class GitHubLabelResponseModel
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
     }
 }
