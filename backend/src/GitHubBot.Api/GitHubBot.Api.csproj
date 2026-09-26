@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>GitHubBot.Api</RootNamespace>
+    <UserSecretsId>8ee39faf-30a9-4732-afc9-f9e2f2a2bb0c</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
