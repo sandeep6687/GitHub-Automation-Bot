@@ -1,6 +1,7 @@
 using GitHubBot.Application.Interfaces;
 using GitHubBot.Application.Services;
 using GitHubBot.Domain.Interfaces;
+using GitHubBot.Domain.Logic;
 using GitHubBot.Infrastructure.BackgroundWorkers;
 using GitHubBot.Infrastructure.ExternalServices;
 using GitHubBot.Infrastructure.Persistence;
@@ -26,12 +27,14 @@ builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>()
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IConnectedRepositoryRepository, ConnectedRepositoryRepository>();
 builder.Services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
+builder.Services.AddScoped<IRuleRepository, RuleRepository>();
 
 // 4. External Clients
 builder.Services.AddHttpClient<IGitHubOAuthClient, GitHubOAuthClient>();
 builder.Services.AddHttpClient<IGitHubApiClient, GitHubApiClient>();
 
-// 5. Application Services
+// 5. Application Services & Rule Engine
+builder.Services.AddSingleton<RuleEngine>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IWebhookSignatureValidator, WebhookSignatureValidator>();
 builder.Services.AddScoped<IWebhookIngestionService, WebhookIngestionService>();
@@ -47,7 +50,7 @@ builder.Services.AddScoped<IRepositoryService>(sp =>
         sp.GetRequiredService<ITokenEncryptionService>(),
         webhookUrl));
 
-builder.Services.AddScoped<IEventProcessor, DefaultEventProcessor>();
+builder.Services.AddScoped<IEventProcessor, RuleExecutionProcessor>();
 builder.Services.AddScoped<IEventProcessingService, EventProcessingService>();
 
 // 6. Background Worker
