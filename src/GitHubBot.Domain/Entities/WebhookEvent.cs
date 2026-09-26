@@ -10,7 +10,7 @@ public class WebhookEvent
     public string EventType { get; set; } = string.Empty;
     public string? Action { get; set; }
     public EventStatus Status { get; set; } = EventStatus.Pending;
-    public string RawPayload { get; set; } = string.Empty;
+    public string RawPayload { get; set; } = "{}";
     public string? ParsedData { get; set; }
 
     // Retry and claim recovery fields

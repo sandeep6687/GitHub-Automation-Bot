@@ -15,22 +15,21 @@ using Moq;
 
 namespace GitHubBot.IntegrationTests;
 
-public class WorkerIntegrationTests
+[Collection("PostgreSqlTests")]
+public class WorkerIntegrationTests : IAsyncLifetime
 {
-    private readonly DbContextOptions<AppDbContext> _dbOptions;
-
-    public WorkerIntegrationTests()
+    public async Task InitializeAsync()
     {
-        _dbOptions = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
+        await PostgresTestHelper.ResetDatabaseAsync();
     }
 
-    private ServiceProvider BuildServiceProvider(IEventProcessor? customProcessor = null)
+    public Task DisposeAsync() => Task.CompletedTask;
+
+    private static ServiceProvider BuildServiceProvider(IEventProcessor? customProcessor = null)
     {
         var services = new ServiceCollection();
 
-        services.AddScoped<AppDbContext>(_ => new AppDbContext(_dbOptions));
+        services.AddScoped<AppDbContext>(_ => PostgresTestHelper.CreateDbContext());
         services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
 
         if (customProcessor != null)
@@ -62,18 +61,10 @@ public class WorkerIntegrationTests
     {
         // Arrange
         var provider = BuildServiceProvider();
-        var repoId = Guid.NewGuid();
+        var (_, repoId) = await PostgresTestHelper.SeedUserAndRepositoryAsync(1111, "test-owner/test-repo-1");
 
-        await using (var context = new AppDbContext(_dbOptions))
+        await using (var context = PostgresTestHelper.CreateDbContext())
         {
-            context.ConnectedRepositories.Add(new ConnectedRepository
-            {
-                Id = repoId,
-                GithubRepositoryId = 1111,
-                FullName = "test-owner/test-repo",
-                EncryptedWebhookSecret = "secret"
-            });
-
             context.WebhookEvents.Add(new WebhookEvent
             {
                 Id = Guid.NewGuid(),
@@ -98,7 +89,7 @@ public class WorkerIntegrationTests
         // Assert
         processedCount.Should().Be(1);
 
-        await using (var verifyContext = new AppDbContext(_dbOptions))
+        await using (var verifyContext = PostgresTestHelper.CreateDbContext())
         {
             var evt = await verifyContext.WebhookEvents.SingleAsync(e => e.DeliveryId == "worker-deliv-1");
             evt.Status.Should().Be(EventStatus.Success);
@@ -119,18 +110,10 @@ public class WorkerIntegrationTests
             .ThrowsAsync(new HttpRequestException("GitHub API connection timeout"));
 
         var provider = BuildServiceProvider(mockProcessor.Object);
-        var repoId = Guid.NewGuid();
+        var (_, repoId) = await PostgresTestHelper.SeedUserAndRepositoryAsync(2222, "test-owner/test-repo-2");
 
-        await using (var context = new AppDbContext(_dbOptions))
+        await using (var context = PostgresTestHelper.CreateDbContext())
         {
-            context.ConnectedRepositories.Add(new ConnectedRepository
-            {
-                Id = repoId,
-                GithubRepositoryId = 2222,
-                FullName = "test-owner/test-repo",
-                EncryptedWebhookSecret = "secret"
-            });
-
             context.WebhookEvents.Add(new WebhookEvent
             {
                 Id = Guid.NewGuid(),
@@ -156,7 +139,7 @@ public class WorkerIntegrationTests
         // Assert
         processedCount.Should().Be(1);
 
-        await using (var verifyContext = new AppDbContext(_dbOptions))
+        await using (var verifyContext = PostgresTestHelper.CreateDbContext())
         {
             var evt = await verifyContext.WebhookEvents.SingleAsync(e => e.DeliveryId == "worker-retry-deliv");
             evt.Status.Should().Be(EventStatus.Retrying);
@@ -178,18 +161,10 @@ public class WorkerIntegrationTests
             .ThrowsAsync(new InvalidOperationException("Fatal error"));
 
         var provider = BuildServiceProvider(mockProcessor.Object);
-        var repoId = Guid.NewGuid();
+        var (_, repoId) = await PostgresTestHelper.SeedUserAndRepositoryAsync(3333, "test-owner/test-repo-3");
 
-        await using (var context = new AppDbContext(_dbOptions))
+        await using (var context = PostgresTestHelper.CreateDbContext())
         {
-            context.ConnectedRepositories.Add(new ConnectedRepository
-            {
-                Id = repoId,
-                GithubRepositoryId = 3333,
-                FullName = "test-owner/test-repo",
-                EncryptedWebhookSecret = "secret"
-            });
-
             context.WebhookEvents.Add(new WebhookEvent
             {
                 Id = Guid.NewGuid(),
@@ -216,7 +191,7 @@ public class WorkerIntegrationTests
         // Assert
         processedCount.Should().Be(1);
 
-        await using (var verifyContext = new AppDbContext(_dbOptions))
+        await using (var verifyContext = PostgresTestHelper.CreateDbContext())
         {
             var evt = await verifyContext.WebhookEvents.SingleAsync(e => e.DeliveryId == "worker-exhaust-deliv");
             evt.Status.Should().Be(EventStatus.Failed);
@@ -231,18 +206,10 @@ public class WorkerIntegrationTests
     {
         // Arrange - Event stuck in Processing for 10 minutes (worker crashed)
         var provider = BuildServiceProvider();
-        var repoId = Guid.NewGuid();
+        var (_, repoId) = await PostgresTestHelper.SeedUserAndRepositoryAsync(4444, "test-owner/test-repo-4");
 
-        await using (var context = new AppDbContext(_dbOptions))
+        await using (var context = PostgresTestHelper.CreateDbContext())
         {
-            context.ConnectedRepositories.Add(new ConnectedRepository
-            {
-                Id = repoId,
-                GithubRepositoryId = 4444,
-                FullName = "test-owner/test-repo",
-                EncryptedWebhookSecret = "secret"
-            });
-
             context.WebhookEvents.Add(new WebhookEvent
             {
                 Id = Guid.NewGuid(),
@@ -268,7 +235,7 @@ public class WorkerIntegrationTests
         // Assert
         processedCount.Should().Be(1);
 
-        await using (var verifyContext = new AppDbContext(_dbOptions))
+        await using (var verifyContext = PostgresTestHelper.CreateDbContext())
         {
             var evt = await verifyContext.WebhookEvents.SingleAsync(e => e.DeliveryId == "worker-stale-deliv");
             evt.Status.Should().Be(EventStatus.Success);
