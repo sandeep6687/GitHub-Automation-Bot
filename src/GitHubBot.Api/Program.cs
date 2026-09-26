@@ -1,10 +1,17 @@
+using GitHubBot.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Service registration (Phase 1+) ---
+// Register PostgreSQL DbContext
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("Database")
+        ?? "Host=localhost;Port=5432;Database=github_bot;Username=postgres;Password=postgres";
+    options.UseNpgsql(connectionString);
+});
 
 var app = builder.Build();
-
-// --- Middleware pipeline (Phase 2+) ---
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
