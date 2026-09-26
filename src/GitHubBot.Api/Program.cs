@@ -1,6 +1,7 @@
 using GitHubBot.Application.Interfaces;
 using GitHubBot.Application.Services;
 using GitHubBot.Domain.Interfaces;
+using GitHubBot.Infrastructure.BackgroundWorkers;
 using GitHubBot.Infrastructure.ExternalServices;
 using GitHubBot.Infrastructure.Persistence;
 using GitHubBot.Infrastructure.Persistence.Repositories;
@@ -46,7 +47,14 @@ builder.Services.AddScoped<IRepositoryService>(sp =>
         sp.GetRequiredService<ITokenEncryptionService>(),
         webhookUrl));
 
-// 6. Authentication & Session Cookies
+builder.Services.AddScoped<IEventProcessor, DefaultEventProcessor>();
+builder.Services.AddScoped<IEventProcessingService, EventProcessingService>();
+
+// 6. Background Worker
+builder.Services.Configure<WorkerOptions>(builder.Configuration.GetSection("Worker"));
+builder.Services.AddHostedService<EventProcessingWorker>();
+
+// 7. Authentication & Session Cookies
 var cookieName = builder.Configuration["Authentication:CookieName"] ?? "gh_bot_session";
 var sessionMinutes = builder.Configuration.GetValue("Authentication:SessionExpirationMinutes", 1440);
 

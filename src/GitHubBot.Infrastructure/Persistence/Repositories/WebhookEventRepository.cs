@@ -69,29 +69,122 @@ public class WebhookEventRepository : IWebhookEventRepository
 
     public async Task<IReadOnlyList<WebhookEvent>> ClaimBatchAsync(int batchSize, CancellationToken cancellationToken = default)
     {
-        // Will be utilized in Phase 5 background worker claim/release pattern
-        return await _context.WebhookEvents
-            .Where(e => e.Status == EventStatus.Pending || e.Status == EventStatus.Retrying)
-            .OrderBy(e => e.CreatedAt)
-            .Take(batchSize)
-            .ToListAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+
+        if (_context.Database.IsNpgsql())
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+            // 1. SELECT ... FOR UPDATE SKIP LOCKED
+            // Only select events that are Pending or (Retrying and next_retry_at <= now)
+            var sql = @"
+                SELECT id AS ""Value""
+                FROM webhook_events
+                WHERE status IN ('Pending', 'Retrying')
+                  AND (next_retry_at IS NULL OR next_retry_at <= {0})
+                ORDER BY created_at ASC
+                LIMIT {1}
+                FOR UPDATE SKIP LOCKED";
+
+            var claimedIds = await _context.Database
+                .SqlQueryRaw<Guid>(sql, now, batchSize)
+                .ToListAsync(cancellationToken);
+
+            if (claimedIds.Count == 0)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return Array.Empty<WebhookEvent>();
+            }
+
+            // 2. UPDATE status = 'Processing', claimed_at = now, attempt_count = attempt_count + 1
+            var pNow = new NpgsqlParameter("now", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = now };
+            var pIds = new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = claimedIds.ToArray() };
+
+            await _context.Database.ExecuteSqlRawAsync(
+                @"UPDATE webhook_events
+                  SET status = 'Processing',
+                      claimed_at = @now,
+                      attempt_count = attempt_count + 1,
+                      updated_at = @now
+                  WHERE id = ANY(@ids)",
+                new object[] { pNow, pIds },
+                cancellationToken);
+
+            // 3. COMMIT transaction: Row locks are completely released before processing!
+            await transaction.CommitAsync(cancellationToken);
+
+            // 4. Load full entities without holding any database locks
+            var claimedEvents = await _context.WebhookEvents
+                .Include(e => e.Repository)
+                .Where(e => claimedIds.Contains(e.Id))
+                .OrderBy(e => e.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            return claimedEvents;
+        }
+        else
+        {
+            // InMemory / relational fallback for testing environments
+            var candidates = await _context.WebhookEvents
+                .Include(e => e.Repository)
+                .Where(e => (e.Status == EventStatus.Pending || e.Status == EventStatus.Retrying)
+                            && (!e.NextRetryAt.HasValue || e.NextRetryAt.Value <= now))
+                .OrderBy(e => e.CreatedAt)
+                .Take(batchSize)
+                .ToListAsync(cancellationToken);
+
+            foreach (var evt in candidates)
+            {
+                evt.Status = EventStatus.Processing;
+                evt.ClaimedAt = now;
+                evt.AttemptCount += 1;
+                evt.UpdatedAt = now;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            return candidates;
+        }
     }
 
     public async Task<int> RecoverStaleProcessingClaimsAsync(TimeSpan staleThreshold, CancellationToken cancellationToken = default)
     {
         var cutoff = DateTime.UtcNow.Subtract(staleThreshold);
-        var staleEvents = await _context.WebhookEvents
-            .Where(e => e.Status == EventStatus.Processing && e.ClaimedAt.HasValue && e.ClaimedAt.Value < cutoff)
-            .ToListAsync(cancellationToken);
+        var now = DateTime.UtcNow;
 
-        foreach (var evt in staleEvents)
+        if (_context.Database.IsNpgsql())
         {
-            evt.Status = EventStatus.Retrying;
-            evt.ClaimedAt = null;
-            evt.UpdatedAt = DateTime.UtcNow;
-        }
+            var pNow = new NpgsqlParameter("now", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = now };
+            var pCutoff = new NpgsqlParameter("cutoff", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = cutoff };
 
-        return await _context.SaveChangesAsync(cancellationToken);
+            return await _context.Database.ExecuteSqlRawAsync(
+                @"UPDATE webhook_events
+                  SET status = 'Retrying',
+                      next_retry_at = @now,
+                      claimed_at = NULL,
+                      last_error = 'Worker crash recovery',
+                      updated_at = @now
+                  WHERE status = 'Processing'
+                    AND claimed_at < @cutoff",
+                new object[] { pNow, pCutoff },
+                cancellationToken);
+        }
+        else
+        {
+            var staleEvents = await _context.WebhookEvents
+                .Where(e => e.Status == EventStatus.Processing && e.ClaimedAt.HasValue && e.ClaimedAt.Value < cutoff)
+                .ToListAsync(cancellationToken);
+
+            foreach (var evt in staleEvents)
+            {
+                evt.Status = EventStatus.Retrying;
+                evt.NextRetryAt = now;
+                evt.ClaimedAt = null;
+                evt.LastError = "Worker crash recovery";
+                evt.UpdatedAt = now;
+            }
+
+            return await _context.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task UpdateAsync(WebhookEvent webhookEvent, CancellationToken cancellationToken = default)
