@@ -23,12 +23,25 @@ builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>()
 
 // 3. Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IConnectedRepositoryRepository, ConnectedRepositoryRepository>();
 
 // 4. External Clients
 builder.Services.AddHttpClient<IGitHubOAuthClient, GitHubOAuthClient>();
+builder.Services.AddHttpClient<IGitHubApiClient, GitHubApiClient>();
 
 // 5. Application Services
 builder.Services.AddScoped<IAuthService, AuthService>();
+var webhookUrl = builder.Configuration["Webhooks:PublicUrl"]
+    ?? builder.Configuration["GitHub:WebhookBaseUrl"]
+    ?? "http://localhost:5000/api/webhooks/github";
+
+builder.Services.AddScoped<IRepositoryService>(sp =>
+    new RepositoryService(
+        sp.GetRequiredService<IUserRepository>(),
+        sp.GetRequiredService<IConnectedRepositoryRepository>(),
+        sp.GetRequiredService<IGitHubApiClient>(),
+        sp.GetRequiredService<ITokenEncryptionService>(),
+        webhookUrl));
 
 // 6. Authentication & Session Cookies
 var cookieName = builder.Configuration["Authentication:CookieName"] ?? "gh_bot_session";
