@@ -24,6 +24,7 @@ builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>()
 // 3. Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IConnectedRepositoryRepository, ConnectedRepositoryRepository>();
+builder.Services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
 
 // 4. External Clients
 builder.Services.AddHttpClient<IGitHubOAuthClient, GitHubOAuthClient>();
@@ -31,6 +32,8 @@ builder.Services.AddHttpClient<IGitHubApiClient, GitHubApiClient>();
 
 // 5. Application Services
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddSingleton<IWebhookSignatureValidator, WebhookSignatureValidator>();
+builder.Services.AddScoped<IWebhookIngestionService, WebhookIngestionService>();
 var webhookUrl = builder.Configuration["Webhooks:PublicUrl"]
     ?? builder.Configuration["GitHub:WebhookBaseUrl"]
     ?? "http://localhost:5000/api/webhooks/github";
