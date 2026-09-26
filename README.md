@@ -111,7 +111,8 @@ export ENCRYPTION_KEY="your_32_byte_base64_encryption_key"
 export Slack__WebhookUrl="https://hooks.slack.com/services/T00/B00/XXXX"
 
 # Run backend API & background worker on http://localhost:5000
-dotnet run --project src/GitHubBot.Api
+dotnet run --project backend/src/GitHubBot.Api
+# (or: cd backend && dotnet run --project src/GitHubBot.Api)
 ```
 
 #### Frontend Dashboard Run
@@ -180,10 +181,13 @@ Slack__WebhookUrl=https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXX
 ### 4. Automated Testing Instructions
 ```bash
 # Run all unit tests (190 tests)
-dotnet test tests/GitHubBot.UnitTests/GitHubBot.UnitTests.csproj --nologo
+dotnet test backend/tests/GitHubBot.UnitTests/GitHubBot.UnitTests.csproj --nologo
 
 # Run real PostgreSQL integration tests (51 tests)
-dotnet test tests/GitHubBot.IntegrationTests/GitHubBot.IntegrationTests.csproj --nologo
+dotnet test backend/tests/GitHubBot.IntegrationTests/GitHubBot.IntegrationTests.csproj --nologo
+
+# Or run the entire test suite from root
+dotnet test --nologo
 
 # Build frontend production bundle
 cd frontend && npm run build
