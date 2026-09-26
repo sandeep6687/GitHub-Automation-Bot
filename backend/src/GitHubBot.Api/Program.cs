@@ -9,15 +9,22 @@ using GitHubBot.Infrastructure.Persistence;
 using GitHubBot.Infrastructure.Persistence.Repositories;
 using GitHubBot.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 0. Support dynamic PORT binding for deployment platforms (Render, Railway, Cloud Run, Heroku)
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
 // 1. Database
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("Database")
-        ?? "Host=localhost;Port=5432;Database=github_bot;Username=postgres;Password=postgres";
+    var connectionString = ResolveDatabaseConnectionString(builder.Configuration);
     options.UseNpgsql(connectionString);
 });
 
@@ -65,11 +72,19 @@ builder.Services.AddScoped<IRepositoryService>(sp =>
 builder.Services.AddScoped<IEventProcessor, RuleExecutionProcessor>();
 builder.Services.AddScoped<IEventProcessingService, EventProcessingService>();
 
-// 6. Background Worker
+// 7. Background Worker
 builder.Services.Configure<WorkerOptions>(builder.Configuration.GetSection("Worker"));
 builder.Services.AddHostedService<EventProcessingWorker>();
 
-// 7. Authentication & Session Cookies
+// 8. Forwarded Headers for Reverse Proxy / HTTPS Deployment
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// 9. Authentication & Session Cookies
 var cookieName = builder.Configuration["Authentication:CookieName"] ?? "gh_bot_session";
 var sessionMinutes = builder.Configuration.GetValue("Authentication:SessionExpirationMinutes", 1440);
 
@@ -97,14 +112,22 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddScoped<IRuleService, RuleService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? new[] { "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000" };
+// 10. CORS Configuration (allows configured origins and automatically includes FrontendUrl)
+var defaultOrigins = new[] { "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000" };
+var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? defaultOrigins;
+var originSet = new HashSet<string>(configuredOrigins, StringComparer.OrdinalIgnoreCase);
+
+var frontendUrl = builder.Configuration["FrontendUrl"];
+if (!string.IsNullOrWhiteSpace(frontendUrl))
+{
+    originSet.Add(frontendUrl.TrimEnd('/'));
+}
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
     {
-        policy.WithOrigins(allowedOrigins)
+        policy.WithOrigins(originSet.ToArray())
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -115,6 +138,15 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 
 var app = builder.Build();
+
+// Safe optional automatic migration on startup
+if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup", false) ||
+    builder.Configuration.GetValue<bool>("APPLY_MIGRATIONS_ON_STARTUP", false))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 // Response buffering ensures StreamPipeWriter compatibility across hosts
 app.Use(async (context, next) =>
@@ -129,6 +161,7 @@ app.Use(async (context, next) =>
     await memStream.CopyToAsync(originalBody);
 });
 
+app.UseForwardedHeaders();
 app.UseCors("FrontendPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
@@ -139,4 +172,27 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.Run();
 
 // Required for WebApplicationFactory in integration tests
-public partial class Program { }
+public partial class Program
+{
+    private static string ResolveDatabaseConnectionString(IConfiguration config)
+    {
+        var raw = config.GetConnectionString("Database")
+            ?? config["DATABASE_URL"]
+            ?? "Host=localhost;Port=5432;Database=github_bot;Username=postgres;Password=postgres";
+
+        if (raw.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) ||
+            raw.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+        {
+            var uri = new Uri(raw);
+            var userInfo = uri.UserInfo.Split(':');
+            var user = userInfo[0];
+            var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+            var host = uri.Host;
+            var hostPort = uri.Port > 0 ? uri.Port : 5432;
+            var database = uri.AbsolutePath.TrimStart('/');
+            return $"Host={host};Port={hostPort};Database={database};Username={user};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+        }
+
+        return raw;
+    }
+}
