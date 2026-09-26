@@ -56,7 +56,13 @@ public class AuthController : ControllerBase
         }
 
         // Delete state cookie immediately to prevent replay/reuse attacks
-        Response.Cookies.Delete(StateCookieName);
+        var isHttps = Request.IsHttps || string.Equals(Request.Headers["X-Forwarded-Proto"], "https", StringComparison.OrdinalIgnoreCase);
+        Response.Cookies.Delete(StateCookieName, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = isHttps,
+            SameSite = SameSiteMode.Lax
+        });
 
         if (string.IsNullOrWhiteSpace(state))
         {

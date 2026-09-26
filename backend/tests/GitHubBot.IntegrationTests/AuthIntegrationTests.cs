@@ -273,4 +273,120 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
         var body = await response.Content.ReadAsStringAsync();
         body.Should().Contain("Logged out successfully");
     }
+
+    [Fact]
+    public async Task ProductionCookie_ShouldHaveSameSiteNone_AndSecure_AndHttpOnly()
+    {
+        const string rawToken = "gho_prod_test_token";
+        const string validCode = "prod_oauth_code";
+        const string validState = "prod_state_value";
+
+        var mockOAuthClient = new Mock<IGitHubOAuthClient>();
+        mockOAuthClient
+            .Setup(c => c.ExchangeCodeForTokenAsync(validCode, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(rawToken);
+
+        mockOAuthClient
+            .Setup(c => c.GetUserProfileAsync(rawToken, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GitHubUserResponse
+            {
+                Id = 998877,
+                Login = "prod_user",
+                Email = "prod@example.com",
+                AvatarUrl = "https://example.com/avatar.png"
+            });
+
+        var mockUserRepository = new Mock<IUserRepository>();
+        mockUserRepository
+            .Setup(r => r.FindByGithubUserIdAsync(998877, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((User?)null);
+
+        mockUserRepository
+            .Setup(r => r.CreateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((User u, CancellationToken _) => u);
+
+        var client = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production");
+            builder.UseSetting("FrontendUrl", "https://git-hub-automation-bot.vercel.app");
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddScoped(_ => mockOAuthClient.Object);
+                services.AddScoped(_ => mockUserRepository.Object);
+            });
+        }).CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/auth/callback?code={validCode}&state={validState}");
+        request.Headers.Add("Cookie", $"{AuthController.StateCookieName}={validState}");
+
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var setCookies = response.Headers.GetValues("Set-Cookie").ToList();
+        var sessionCookie = setCookies.FirstOrDefault(c => c.Contains("gh_bot_session"));
+        sessionCookie.Should().NotBeNull();
+
+        var cookieHeader = sessionCookie!.ToLowerInvariant();
+        cookieHeader.Should().Contain("samesite=none");
+        cookieHeader.Should().Contain("secure");
+        cookieHeader.Should().Contain("httponly");
+    }
+
+    [Fact]
+    public async Task OAuthStateCookie_ShouldRetainSameSiteLax_ForCsrfProtection()
+    {
+        var client = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production");
+            builder.UseSetting("FrontendUrl", "https://git-hub-automation-bot.vercel.app");
+        }).CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync("/api/auth/login");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+
+        var setCookies = response.Headers.GetValues("Set-Cookie").ToList();
+        var stateCookie = setCookies.FirstOrDefault(c => c.Contains(AuthController.StateCookieName));
+        stateCookie.Should().NotBeNull();
+
+        var cookieHeader = stateCookie!.ToLowerInvariant();
+        cookieHeader.Should().Contain("samesite=lax");
+        cookieHeader.Should().NotContain("samesite=none");
+        cookieHeader.Should().Contain("httponly");
+    }
+
+    [Theory]
+    [InlineData("https://git-hub-automation-bot.vercel.app")]
+    [InlineData("http://localhost:5173")]
+    public async Task Cors_AllowedOrigin_ShouldReturnAllowCredentialsAndOrigin(string origin)
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/auth/me");
+        request.Headers.Add("Origin", origin);
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+        request.Headers.Add("Access-Control-Request-Headers", "content-type");
+
+        var response = await client.SendAsync(request);
+
+        response.Headers.Contains("Access-Control-Allow-Origin").Should().BeTrue();
+        response.Headers.GetValues("Access-Control-Allow-Origin").Single().Should().Be(origin);
+        response.Headers.Contains("Access-Control-Allow-Credentials").Should().BeTrue();
+        response.Headers.GetValues("Access-Control-Allow-Credentials").Single().Should().Be("true");
+    }
+
+    [Fact]
+    public async Task Cors_DisallowedOrigin_ShouldNotReturnCorsHeaders()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/auth/me");
+        request.Headers.Add("Origin", "https://malicious-site.example.com");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var response = await client.SendAsync(request);
+
+        response.Headers.Contains("Access-Control-Allow-Origin").Should().BeFalse();
+    }
 }

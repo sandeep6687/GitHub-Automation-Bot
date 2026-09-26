@@ -87,14 +87,31 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 // 9. Authentication & Session Cookies
 var cookieName = builder.Configuration["Authentication:CookieName"] ?? "gh_bot_session";
 var sessionMinutes = builder.Configuration.GetValue("Authentication:SessionExpirationMinutes", 1440);
+var frontendUrl = builder.Configuration["FrontendUrl"];
+
+var isCrossSiteFrontend = !string.IsNullOrWhiteSpace(frontendUrl) &&
+    !frontendUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase) &&
+    !frontendUrl.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase);
+
+var isProduction = builder.Environment.IsProduction() || isCrossSiteFrontend;
+
+var sameSiteConfig = builder.Configuration["Authentication:CookieSameSite"];
+var sameSiteMode = !string.IsNullOrEmpty(sameSiteConfig) && Enum.TryParse<SameSiteMode>(sameSiteConfig, true, out var parsedSameSite)
+    ? parsedSameSite
+    : (isProduction ? SameSiteMode.None : SameSiteMode.Lax);
+
+var securePolicyConfig = builder.Configuration["Authentication:CookieSecurePolicy"];
+var securePolicy = !string.IsNullOrEmpty(securePolicyConfig) && Enum.TryParse<CookieSecurePolicy>(securePolicyConfig, true, out var parsedSecurePolicy)
+    ? parsedSecurePolicy
+    : (sameSiteMode == SameSiteMode.None ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest);
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
         options.Cookie.Name = cookieName;
         options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SameSite = sameSiteMode;
+        options.Cookie.SecurePolicy = securePolicy;
         options.ExpireTimeSpan = TimeSpan.FromMinutes(sessionMinutes);
         options.SlidingExpiration = true;
         options.Events.OnRedirectToLogin = context =>
@@ -113,11 +130,22 @@ builder.Services.AddScoped<IRuleService, RuleService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 
 // 10. CORS Configuration (allows configured origins and automatically includes FrontendUrl)
-var defaultOrigins = new[] { "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000" };
+var defaultOrigins = new[]
+{
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "https://git-hub-automation-bot.vercel.app"
+};
 var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? defaultOrigins;
 var originSet = new HashSet<string>(configuredOrigins, StringComparer.OrdinalIgnoreCase);
 
-var frontendUrl = builder.Configuration["FrontendUrl"];
+// Ensure essential production and development origins are always registered
+originSet.Add("https://git-hub-automation-bot.vercel.app");
+originSet.Add("http://localhost:5173");
+originSet.Add("http://127.0.0.1:5173");
+originSet.Add("http://localhost:3000");
+
 if (!string.IsNullOrWhiteSpace(frontendUrl))
 {
     originSet.Add(frontendUrl.TrimEnd('/'));
