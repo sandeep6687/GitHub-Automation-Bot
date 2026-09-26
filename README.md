@@ -167,7 +167,7 @@ Configure the webhook URL as a server-side secret using either environment varia
 
 ```bash
 # In .env or system environment
-Slack__WebhookUrl=https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
+Slack__WebhookUrl=https://hooks.slack.com/services/WORKSPACE_ID/CHANNEL_ID/SECRET_TOKEN
 ```
 
 *Note: If `Slack__WebhookUrl` is not configured, the application starts normally. Only rules triggering `SlackNotify` will fail gracefully with a descriptive configuration error.*
