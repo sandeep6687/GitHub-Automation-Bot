@@ -215,4 +215,39 @@ public class WebhookEventRepository : IWebhookEventRepository
             await _context.SaveChangesAsync(cancellationToken);
         }
     }
+
+    public async Task<IReadOnlyList<WebhookEvent>> GetRecentEventsAsync(
+        Guid repositoryId,
+        int limit = 50,
+        DateTime? before = null,
+        EventStatus? status = null,
+        string? eventType = null,
+        CancellationToken cancellationToken = default)
+    {
+        var clampedLimit = Math.Clamp(limit, 1, 100);
+
+        var query = _context.WebhookEvents
+            .Include(e => e.ActionExecutions)
+            .Where(e => e.RepositoryId == repositoryId);
+
+        if (before.HasValue)
+        {
+            query = query.Where(e => e.CreatedAt < before.Value);
+        }
+
+        if (status.HasValue)
+        {
+            query = query.Where(e => e.Status == status.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(eventType))
+        {
+            query = query.Where(e => e.EventType == eventType);
+        }
+
+        return await query
+            .OrderByDescending(e => e.CreatedAt)
+            .Take(clampedLimit)
+            .ToListAsync(cancellationToken);
+    }
 }

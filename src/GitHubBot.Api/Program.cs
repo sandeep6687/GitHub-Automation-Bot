@@ -94,6 +94,23 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         };
     });
 
+builder.Services.AddScoped<IRuleService, RuleService>();
+builder.Services.AddScoped<IActivityService, ActivityService>();
+
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? new[] { "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000" };
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendPolicy", policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 
@@ -112,6 +129,7 @@ app.Use(async (context, next) =>
     await memStream.CopyToAsync(originalBody);
 });
 
+app.UseCors("FrontendPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
 

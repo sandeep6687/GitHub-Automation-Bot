@@ -58,7 +58,48 @@ public class RuleRepository : IRuleRepository
     public async Task UpdateAsync(Rule rule, CancellationToken cancellationToken = default)
     {
         rule.UpdatedAt = DateTime.UtcNow;
-        _context.Rules.Update(rule);
+
+        if (_context.Entry(rule).State == EntityState.Detached)
+        {
+            _context.Rules.Attach(rule);
+            _context.Entry(rule).State = EntityState.Modified;
+        }
+
+        // Remove old conditions and actions from DB for this rule that are no longer in the collections
+        var currentConditionIds = rule.Conditions.Select(c => c.Id).ToHashSet();
+        var oldConditions = await _context.RuleConditions
+            .Where(c => c.RuleId == rule.Id && !currentConditionIds.Contains(c.Id))
+            .ToListAsync(cancellationToken);
+        _context.RuleConditions.RemoveRange(oldConditions);
+
+        var currentActionIds = rule.Actions.Select(a => a.Id).ToHashSet();
+        var oldActions = await _context.RuleActions
+            .Where(a => a.RuleId == rule.Id && !currentActionIds.Contains(a.Id))
+            .ToListAsync(cancellationToken);
+        _context.RuleActions.RemoveRange(oldActions);
+
+        // Ensure conditions have correct state
+        foreach (var condition in rule.Conditions)
+        {
+            var entry = _context.Entry(condition);
+            if (entry.State == EntityState.Detached || entry.State == EntityState.Modified)
+            {
+                var exists = await _context.RuleConditions.AnyAsync(c => c.Id == condition.Id, cancellationToken);
+                entry.State = exists ? EntityState.Modified : EntityState.Added;
+            }
+        }
+
+        // Ensure actions have correct state
+        foreach (var action in rule.Actions)
+        {
+            var entry = _context.Entry(action);
+            if (entry.State == EntityState.Detached || entry.State == EntityState.Modified)
+            {
+                var exists = await _context.RuleActions.AnyAsync(a => a.Id == action.Id, cancellationToken);
+                entry.State = exists ? EntityState.Modified : EntityState.Added;
+            }
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
     }
 

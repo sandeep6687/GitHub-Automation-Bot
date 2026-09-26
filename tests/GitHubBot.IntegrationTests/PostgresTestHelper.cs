@@ -11,6 +11,7 @@ public static class PostgresTestHelper
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql(ConnectionString)
+            .EnableSensitiveDataLogging()
             .Options;
 
         return new AppDbContext(options);

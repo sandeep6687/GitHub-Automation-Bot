@@ -5,5 +5,7 @@ public enum ActionType
     GithubAddLabel,
     GithubAddComment,
     SlackNotification,
-    SlackNotify
+    SlackNotify,
+    AddLabel = GithubAddLabel,
+    AddComment = GithubAddComment
 }
