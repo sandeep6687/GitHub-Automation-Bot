@@ -106,13 +106,23 @@ public class RepositoryService : IRepositoryService
         var encryptedWebhookSecret = _tokenEncryptionService.Encrypt(webhookSecret);
 
         // 4. Create GitHub webhook
-        var webhookId = await _gitHubApiClient.CreateWebhookAsync(
-            accessToken,
-            repoDetails.Owner,
-            repoDetails.Name,
-            _webhookCallbackUrl,
-            webhookSecret,
-            cancellationToken);
+        long? webhookId = null;
+        try
+        {
+            webhookId = await _gitHubApiClient.CreateWebhookAsync(
+                accessToken,
+                repoDetails.Owner,
+                repoDetails.Name,
+                _webhookCallbackUrl,
+                webhookSecret,
+                cancellationToken);
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("reachable over the public Internet") || _webhookCallbackUrl.Contains("localhost"))
+        {
+            // When running locally without a public tunnel (e.g. ngrok/smee), GitHub rejects localhost webhook URLs.
+            // Proceed with connecting the repository locally so rule configuration and local events work.
+            webhookId = null;
+        }
 
         // 5. Persist ConnectedRepository
         var connectedRepo = new ConnectedRepository
