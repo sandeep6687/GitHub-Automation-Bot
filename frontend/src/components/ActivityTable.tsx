@@ -117,6 +117,33 @@ export const ActivityTable: React.FC<ActivityTableProps> = ({
                               </div>
                             )}
 
+                            {evt.parsedData && (() => {
+                              try {
+                                const parsed = JSON.parse(evt.parsedData);
+                                return (
+                                  <div style={{ marginBottom: '1rem' }}>
+                                    <h4 style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                                      Evaluation
+                                    </h4>
+                                    <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid var(--border-color)', fontSize: '0.8125rem' }}>
+                                      <div style={{ display: 'flex', gap: '2rem' }}>
+                                        <div>
+                                          <span style={{ color: 'var(--text-muted)' }}>Matched Rules: </span>
+                                          <strong>{parsed.matchedRules ?? 0}</strong>
+                                        </div>
+                                        <div>
+                                          <span style={{ color: 'var(--text-muted)' }}>Total Actions: </span>
+                                          <strong>{parsed.actionCount ?? 0}</strong>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              } catch (e) {
+                                return null;
+                              }
+                            })()}
+
                             <div>
                               <h4 style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
                                 Action Execution History
@@ -128,8 +155,8 @@ export const ActivityTable: React.FC<ActivityTableProps> = ({
                               ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                                   {evt.actions.map((act, actIdx) => (
+                                    <React.Fragment key={actIdx}>
                                     <div
-                                      key={actIdx}
                                       style={{
                                         display: 'flex',
                                         alignItems: 'center',
@@ -161,6 +188,23 @@ export const ActivityTable: React.FC<ActivityTableProps> = ({
                                         <StatusBadge status={act.status} />
                                       </div>
                                     </div>
+                                    {act.actionType === 'AiTriage' && act.status.toUpperCase() === 'SUCCESS' && (act as any).responsePayload && (() => {
+                                      try {
+                                        const aiData = JSON.parse((act as any).responsePayload);
+                                        return (
+                                          <div style={{ padding: '0.75rem', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderTop: 'none', borderBottomLeftRadius: '0.25rem', borderBottomRightRadius: '0.25rem', fontSize: '0.8125rem', marginTop: '-0.375rem' }}>
+                                            <div style={{ marginBottom: '0.5rem' }}><strong>AI Summary:</strong> {aiData.summary}</div>
+                                            <div style={{ display: 'flex', gap: '1rem', color: 'var(--text-secondary)' }}>
+                                              <div><strong>Category:</strong> {aiData.category}</div>
+                                              <div><strong>Severity:</strong> {aiData.severity}</div>
+                                            </div>
+                                          </div>
+                                        );
+                                      } catch {
+                                        return null;
+                                      }
+                                    })()}
+                                    </React.Fragment>
                                   ))}
                                 </div>
                               )}

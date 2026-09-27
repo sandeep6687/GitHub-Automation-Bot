@@ -11,5 +11,6 @@ public class ActivityEventDto
     public DateTime? ProcessedAt { get; set; }
     public int AttemptCount { get; set; }
     public string? LastError { get; set; }
+    public string? ParsedData { get; set; }
     public List<ActivityActionDto> Actions { get; set; } = new();
 }

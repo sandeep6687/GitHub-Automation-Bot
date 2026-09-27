@@ -50,6 +50,8 @@ builder.Services.AddHttpClient<ISlackApiClient, SlackApiClient>();
 builder.Services.AddScoped<IActionHandler, GitHubLabelActionHandler>();
 builder.Services.AddScoped<IActionHandler, GitHubCommentActionHandler>();
 builder.Services.AddScoped<IActionHandler, SlackNotificationActionHandler>();
+builder.Services.AddHttpClient<AiTriageActionHandler>();
+builder.Services.AddScoped<IActionHandler, AiTriageActionHandler>();
 builder.Services.AddScoped<IActionDispatcher, ActionDispatcher>();
 
 // 6. Application Services & Rule Engine

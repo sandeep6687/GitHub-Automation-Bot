@@ -16,6 +16,7 @@ export interface ActivityEvent {
   processedAt?: string;
   attemptCount: number;
   lastError?: string;
+  parsedData?: string;
   actions: ActivityAction[];
 }
 

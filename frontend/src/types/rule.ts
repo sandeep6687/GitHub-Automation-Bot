@@ -8,7 +8,7 @@ export interface RuleCondition {
 
 export interface RuleAction {
   id?: string;
-  actionType: 'AddLabel' | 'AddComment' | 'SlackNotify';
+  actionType: 'AddLabel' | 'AddComment' | 'SlackNotify' | 'AiTriage';
   executionOrder: number;
   configuration: Record<string, any>;
 }

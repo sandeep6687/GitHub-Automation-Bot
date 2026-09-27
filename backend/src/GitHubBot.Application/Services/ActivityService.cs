@@ -71,6 +71,7 @@ public class ActivityService : IActivityService
             ProcessedAt = e.ProcessedAt,
             AttemptCount = e.AttemptCount,
             LastError = e.LastError,
+            ParsedData = e.ParsedData,
             Actions = (e.ActionExecutions ?? Array.Empty<GitHubBot.Domain.Entities.ActionExecution>())
                 .OrderBy(a => a.ExecutedAt)
                 .Select(a => new ActivityActionDto
@@ -84,7 +85,8 @@ public class ActivityService : IActivityService
                     Status = a.Status.ToString(),
                     ExecutedAt = a.ExecutedAt,
                     DurationMs = a.DurationMs,
-                    ErrorMessage = a.ErrorMessage
+                    ErrorMessage = a.ErrorMessage,
+                    ResponsePayload = a.ResponsePayload
                 }).ToList()
         }).ToList();
 

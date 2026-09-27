@@ -7,5 +7,6 @@ public enum ActionType
     SlackNotification,
     SlackNotify,
     AddLabel = GithubAddLabel,
-    AddComment = GithubAddComment
+    AddComment = GithubAddComment,
+    AiTriage
 }

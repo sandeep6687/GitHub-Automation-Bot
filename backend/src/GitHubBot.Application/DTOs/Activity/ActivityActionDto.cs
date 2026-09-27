@@ -7,4 +7,5 @@ public class ActivityActionDto
     public DateTime ExecutedAt { get; set; }
     public int? DurationMs { get; set; }
     public string? ErrorMessage { get; set; }
+    public string? ResponsePayload { get; set; }
 }

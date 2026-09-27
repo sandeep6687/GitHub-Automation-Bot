@@ -54,10 +54,12 @@ export const RuleForm: React.FC<RuleFormProps> = ({
     setConditions(updated);
   };
 
-  const handleAddAction = (type: 'AddLabel' | 'AddComment' | 'SlackNotify') => {
+  const handleAddAction = (type: 'AddLabel' | 'AddComment' | 'SlackNotify' | 'AiTriage') => {
     let config: Record<string, any> = {};
     if (type === 'AddLabel') config = { label: '' };
     if (type === 'AddComment') config = { body: '' };
+    if (type === 'SlackNotify') config = { message: '🐛 Bug detected in {{repository}}: {{title}}' };
+    if (type === 'AiTriage') config = {};
     if (type === 'SlackNotify') config = { message: '🐛 Bug detected in {{repository}}: {{title}}' };
 
     setActions([
@@ -284,6 +286,14 @@ export const RuleForm: React.FC<RuleFormProps> = ({
             >
               + Slack
             </button>
+            <button
+              type="button"
+              onClick={() => handleAddAction('AiTriage')}
+              className="btn btn-outline btn-sm"
+              title="Automatically summarize and categorize using AI"
+            >
+              + AI Triage
+            </button>
           </div>
         </div>
 
@@ -350,6 +360,14 @@ export const RuleForm: React.FC<RuleFormProps> = ({
                 />
                 <p className="form-hint">
                   Supported variables: <span className="code-tag">{'{{title}}'}</span>, <span className="code-tag">{'{{author}}'}</span>, <span className="code-tag">{'{{action}}'}</span>, <span className="code-tag">{'{{repository}}'}</span>, <span className="code-tag">{'{{event}}'}</span>, <span className="code-tag">{'{{issueNumber}}'}</span>, <span className="code-tag">{'{{url}}'}</span>
+                </p>
+              </div>
+            )}
+
+            {act.actionType === 'AiTriage' && (
+              <div>
+                <p className="form-hint" style={{ fontSize: '0.75rem', margin: 0 }}>
+                  AI Triage will automatically analyze the issue/PR and provide a structured summary, category, and severity in the Activity log.
                 </p>
               </div>
             )}
