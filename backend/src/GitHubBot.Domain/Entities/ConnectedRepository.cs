@@ -11,6 +11,7 @@ public class ConnectedRepository
     public string DefaultBranch { get; set; } = "main";
     public long? WebhookId { get; set; }
     public string EncryptedWebhookSecret { get; set; } = string.Empty;
+    public long? InstallationId { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

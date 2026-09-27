@@ -35,6 +35,28 @@ export const RepositoryCard: React.FC<RepositoryCardProps> = ({
           <span className="badge badge-success">Connected</span>
         </div>
 
+        {(!connectedRepo.installationId) && (
+          <div style={{
+            marginTop: '1rem',
+            padding: '0.5rem',
+            backgroundColor: 'var(--warning-bg, #fff3cd)',
+            color: 'var(--warning-text, #856404)',
+            borderRadius: '0.25rem',
+            fontSize: '0.75rem',
+            border: '1px solid var(--warning-border, #ffeeba)'
+          }}>
+            <strong>Note:</strong> The GitHub App is not installed for this repository. Bot actions will use your personal OAuth token (fallback mode).<br />
+            <a 
+              href="https://github.com/settings/apps" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ color: 'inherit', textDecoration: 'underline', fontWeight: 'bold' }}
+            >
+              Install GitHub App
+            </a> to improve reliability and security.
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
           {onViewRules && (
             <button

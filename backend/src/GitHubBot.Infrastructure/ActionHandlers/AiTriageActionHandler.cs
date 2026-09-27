@@ -72,7 +72,7 @@ Respond with a JSON object containing the following keys:
                 generationConfig = new { response_mime_type = "application/json" }
             };
 
-            var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={apiKey}";
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key={apiKey}";
             var response = await _httpClient.PostAsJsonAsync(url, requestBody, cancellationToken);
             
             var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -80,7 +80,11 @@ Respond with a JSON object containing the following keys:
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Gemini API failed with status {StatusCode}. Response: {Response}", response.StatusCode, responseString);
-                return ActionResult.Failed($"AI Provider failed with status {response.StatusCode}", null, responseString, (int)sw.ElapsedMilliseconds, isTransient: true);
+                
+                bool isTransient = response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || 
+                                   (int)response.StatusCode >= 500;
+
+                return ActionResult.Failed($"AI Provider failed with status {response.StatusCode}", null, responseString, (int)sw.ElapsedMilliseconds, isTransient: isTransient);
             }
 
             var responseJson = JsonNode.Parse(responseString);

@@ -88,6 +88,68 @@ public class AiTriageActionHandlerTests
         result.IsTransientError.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task ExecuteAsync_ClientError_ReturnsPermanentFailure(HttpStatusCode statusCode)
+    {
+        _configMock.Setup(c => c["Gemini:ApiKey"]).Returns("fake-key");
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>()
+            )
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = statusCode,
+                Content = new StringContent("client error")
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var handler = new AiTriageActionHandler(client, _configMock.Object, _loggerMock.Object);
+
+        var result = await handler.ExecuteAsync(_context);
+
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain($"AI Provider failed with status {statusCode}");
+        result.IsTransientError.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_TooManyRequests_ReturnsTransientFailure()
+    {
+        _configMock.Setup(c => c["Gemini:ApiKey"]).Returns("fake-key");
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>()
+            )
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.TooManyRequests,
+                Content = new StringContent("rate limited")
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var handler = new AiTriageActionHandler(client, _configMock.Object, _loggerMock.Object);
+
+        var result = await handler.ExecuteAsync(_context);
+
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("AI Provider failed with status TooManyRequests");
+        result.IsTransientError.Should().BeTrue();
+    }
+
     [Fact]
     public async Task ExecuteAsync_Success_ReturnsPayload()
     {

@@ -95,6 +95,32 @@ public class GitHubApiClient : IGitHubApiClient
         };
     }
 
+    public async Task<long?> GetAppInstallationIdForRepositoryAsync(
+        string accessToken,
+        string owner,
+        string repo,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"https://api.github.com/repos/{owner}/{repo}/installation");
+        SetAuthHeader(request, accessToken);
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null; // App is not installed on this repository
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"GitHub API failed to get installation for {owner}/{repo}: {response.StatusCode}");
+        }
+
+        var installation = await response.Content.ReadFromJsonAsync<GitHubInstallationModel>(cancellationToken: cancellationToken);
+        return installation?.Id;
+    }
+
     public async Task<long> CreateWebhookAsync(
         string accessToken,
         string owner,
@@ -310,5 +336,11 @@ public class GitHubApiClient : IGitHubApiClient
     {
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
+    }
+
+    private class GitHubInstallationModel
+    {
+        [JsonPropertyName("id")]
+        public long Id { get; set; }
     }
 }

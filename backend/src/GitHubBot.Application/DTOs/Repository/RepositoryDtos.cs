@@ -19,6 +19,7 @@ public class ConnectedRepoDto
     public string Owner { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string DefaultBranch { get; set; } = "main";
+    public long? InstallationId { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
 }

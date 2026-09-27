@@ -28,6 +28,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString);
 });
 
+// Memory Cache
+builder.Services.AddMemoryCache();
+
+// Options
+builder.Services.Configure<GitHubBot.Application.Configuration.GitHubAppOptions>(
+    builder.Configuration.GetSection(GitHubBot.Application.Configuration.GitHubAppOptions.SectionName));
+
 // 2. Security & Encryption
 builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
 
@@ -41,6 +48,7 @@ builder.Services.AddScoped<IActionExecutionRepository, ActionExecutionRepository
 // 4. External Clients
 builder.Services.AddHttpClient<IGitHubOAuthClient, GitHubOAuthClient>();
 builder.Services.AddHttpClient<IGitHubApiClient, GitHubApiClient>();
+builder.Services.AddHttpClient<IGitHubAppTokenProvider, GitHubAppTokenProvider>();
 builder.Services.AddScoped<IGitHubTokenProvider, GitHubTokenProvider>();
 builder.Services.Configure<GitHubBot.Application.Configuration.SlackOptions>(
     builder.Configuration.GetSection(GitHubBot.Application.Configuration.SlackOptions.SectionName));

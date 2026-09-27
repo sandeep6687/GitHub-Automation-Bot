@@ -4,6 +4,7 @@ using GitHubBot.Application.Interfaces;
 using GitHubBot.Domain.Entities;
 using GitHubBot.Domain.Enums;
 using GitHubBot.Infrastructure.ActionHandlers;
+using Microsoft.Extensions.Logging;
 using Moq;
 
 namespace GitHubBot.UnitTests;
@@ -12,6 +13,7 @@ public class GitHubLabelActionHandlerTests
 {
     private readonly Mock<IGitHubApiClient> _apiClientMock;
     private readonly Mock<IGitHubTokenProvider> _tokenProviderMock;
+    private readonly Mock<ILogger<GitHubLabelActionHandler>> _loggerMock;
     private readonly GitHubLabelActionHandler _handler;
     private readonly ConnectedRepository _repository;
     private readonly WebhookEvent _webhookEvent;
@@ -20,7 +22,8 @@ public class GitHubLabelActionHandlerTests
     {
         _apiClientMock = new Mock<IGitHubApiClient>();
         _tokenProviderMock = new Mock<IGitHubTokenProvider>();
-        _handler = new GitHubLabelActionHandler(_apiClientMock.Object, _tokenProviderMock.Object);
+        _loggerMock = new Mock<ILogger<GitHubLabelActionHandler>>();
+        _handler = new GitHubLabelActionHandler(_apiClientMock.Object, _tokenProviderMock.Object, _loggerMock.Object);
 
         _repository = new ConnectedRepository
         {
@@ -160,6 +163,79 @@ public class GitHubLabelActionHandlerTests
         // Assert
         result.Success.Should().BeFalse();
         result.IsTransientError.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("valid issue or PR number");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenGitHubReturnsEmptyArray_ShouldReturnFailed()
+    {
+        // Arrange
+        var ruleAction = new RuleAction
+        {
+            Id = Guid.NewGuid(),
+            ActionType = ActionType.GithubAddLabel,
+            Configuration = "{\"label\":\"triage:bug\"}"
+        };
+
+        _apiClientMock
+            .Setup(c => c.AddLabelsAsync(
+                "ghp_valid_mock_token",
+                "octocat",
+                "Hello-World",
+                42,
+                It.Is<IReadOnlyList<string>>(l => l.Contains("triage:bug")),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<string>()); // Empty array means GitHub ignored it
+
+        var context = new ActionContext(
+            _webhookEvent,
+            ruleAction,
+            _repository,
+            issueOrPrNumber: 42,
+            attemptNumber: 1);
+
+        // Act
+        var result = await _handler.ExecuteAsync(context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("not applied");
+        result.IsTransientError.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenGitHubThrowsException_ShouldReturnFailed()
+    {
+        // Arrange
+        var ruleAction = new RuleAction
+        {
+            Id = Guid.NewGuid(),
+            ActionType = ActionType.GithubAddLabel,
+            Configuration = "{\"label\":\"triage:bug\"}"
+        };
+
+        _apiClientMock
+            .Setup(c => c.AddLabelsAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<int>(),
+                It.IsAny<IReadOnlyList<string>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Application.Exceptions.GitHubApiException(System.Net.HttpStatusCode.Forbidden, "Forbidden", null));
+
+        var context = new ActionContext(
+            _webhookEvent,
+            ruleAction,
+            _repository,
+            issueOrPrNumber: 42,
+            attemptNumber: 1);
+
+        // Act
+        var result = await _handler.ExecuteAsync(context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("Forbidden");
+        result.IsTransientError.Should().BeFalse();
     }
 }

@@ -5,6 +5,7 @@ export interface ConnectedRepository {
   owner: string;
   name: string;
   defaultBranch: string;
+  installationId?: number | null;
   isActive: boolean;
   createdAt: string;
 }

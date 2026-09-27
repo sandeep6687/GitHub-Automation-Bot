@@ -4,6 +4,7 @@ using GitHubBot.Application.DTOs.Actions;
 using GitHubBot.Application.Exceptions;
 using GitHubBot.Application.Interfaces;
 using GitHubBot.Domain.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace GitHubBot.Infrastructure.ActionHandlers;
 
@@ -11,15 +12,18 @@ public class GitHubLabelActionHandler : IActionHandler
 {
     private readonly IGitHubApiClient _gitHubApiClient;
     private readonly IGitHubTokenProvider _tokenProvider;
+    private readonly ILogger<GitHubLabelActionHandler> _logger;
 
     public ActionType ActionType => ActionType.GithubAddLabel;
 
     public GitHubLabelActionHandler(
         IGitHubApiClient gitHubApiClient,
-        IGitHubTokenProvider tokenProvider)
+        IGitHubTokenProvider tokenProvider,
+        ILogger<GitHubLabelActionHandler> logger)
     {
         _gitHubApiClient = gitHubApiClient ?? throw new ArgumentNullException(nameof(gitHubApiClient));
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<ActionResult> ExecuteAsync(ActionContext context, CancellationToken cancellationToken = default)
@@ -85,6 +89,15 @@ public class GitHubLabelActionHandler : IActionHandler
 
         var sanitizedRequest = JsonSerializer.Serialize(new { label = normalizedLabel });
         var sw = Stopwatch.StartNew();
+        string authMode = context.Repository.InstallationId.HasValue && context.Repository.InstallationId.Value > 0 ? "GitHubApp" : "OAuth";
+
+        _logger.LogInformation(
+            "GitHubLabelAction started Repository={Owner}/{Repo} IssueNumber={IssueNumber} Label={Label} AuthMode={AuthMode}",
+            context.Repository.Owner,
+            context.Repository.Name,
+            context.IssueOrPrNumber.Value,
+            normalizedLabel,
+            authMode);
 
         try
         {
@@ -98,17 +111,59 @@ public class GitHubLabelActionHandler : IActionHandler
                 cancellationToken);
 
             sw.Stop();
+            
+            // Validate that GitHub actually added the label (it can return 200 OK but ignore the label if it doesn't exist and token lacks permission to create it)
+            if (!addedLabels.Contains(normalizedLabel, StringComparer.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "GitHubLabelAction response StatusCode=200 Repository={Owner}/{Repo} IssueNumber={IssueNumber} Label={Label} - Label was ignored by GitHub.",
+                    context.Repository.Owner,
+                    context.Repository.Name,
+                    context.IssueOrPrNumber.Value,
+                    normalizedLabel);
+
+                var failedResponse = JsonSerializer.Serialize(new { returnedLabels = addedLabels, error = "Label was not applied by GitHub API." });
+                return ActionResult.Failed(
+                    $"GitHub API request succeeded but the label '{normalizedLabel}' was not applied. Ensure the label exists or the token has permission to create labels.", 
+                    sanitizedRequest, 
+                    failedResponse, 
+                    (int)sw.ElapsedMilliseconds, 
+                    isTransient: false); // Permanent failure, user must fix configuration/permissions
+            }
+
+            _logger.LogInformation(
+                "GitHubLabelAction response StatusCode=200 Repository={Owner}/{Repo} IssueNumber={IssueNumber} Label={Label}",
+                context.Repository.Owner,
+                context.Repository.Name,
+                context.IssueOrPrNumber.Value,
+                normalizedLabel);
+
             var sanitizedResponse = JsonSerializer.Serialize(new { labels = addedLabels });
             return ActionResult.Succeeded(sanitizedRequest, sanitizedResponse, (int)sw.ElapsedMilliseconds);
         }
         catch (GitHubApiException ex)
         {
             sw.Stop();
+            _logger.LogError(
+                "GitHubLabelAction response StatusCode={StatusCode} Repository={Owner}/{Repo} IssueNumber={IssueNumber} Label={Label} Error={Error}",
+                ex.StatusCode,
+                context.Repository.Owner,
+                context.Repository.Name,
+                context.IssueOrPrNumber.Value,
+                normalizedLabel,
+                ex.Message);
             return ActionResult.Failed(ex.Message, sanitizedRequest, ex.ResponseBody, (int)sw.ElapsedMilliseconds, isTransient: ex.IsTransient);
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             sw.Stop();
+            _logger.LogError(
+                ex,
+                "GitHubLabelAction failed unexpectedly Repository={Owner}/{Repo} IssueNumber={IssueNumber} Label={Label}",
+                context.Repository.Owner,
+                context.Repository.Name,
+                context.IssueOrPrNumber.Value,
+                normalizedLabel);
             return ActionResult.Failed(ex.Message, sanitizedRequest, null, (int)sw.ElapsedMilliseconds, isTransient: true);
         }
     }

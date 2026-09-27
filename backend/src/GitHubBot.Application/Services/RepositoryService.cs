@@ -66,6 +66,7 @@ public class RepositoryService : IRepositoryService
             Owner = r.Owner,
             Name = r.Name,
             DefaultBranch = r.DefaultBranch,
+            InstallationId = r.InstallationId,
             IsActive = r.IsActive,
             CreatedAt = r.CreatedAt
         }).ToList();
@@ -96,6 +97,10 @@ public class RepositoryService : IRepositoryService
         {
             throw new InvalidOperationException("Repository not found on GitHub or access was denied.");
         }
+
+        // 1b. Check if GitHub App is installed
+        var installationId = await _gitHubApiClient.GetAppInstallationIdForRepositoryAsync(
+            accessToken, repoDetails.Owner, repoDetails.Name, cancellationToken);
 
         // 2. Generate cryptographically secure random per-repository webhook secret
         var secretBytes = new byte[32];
@@ -136,6 +141,7 @@ public class RepositoryService : IRepositoryService
             DefaultBranch = repoDetails.DefaultBranch,
             WebhookId = webhookId,
             EncryptedWebhookSecret = encryptedWebhookSecret,
+            InstallationId = installationId,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -151,6 +157,7 @@ public class RepositoryService : IRepositoryService
             Owner = saved.Owner,
             Name = saved.Name,
             DefaultBranch = saved.DefaultBranch,
+            InstallationId = saved.InstallationId,
             IsActive = saved.IsActive,
             CreatedAt = saved.CreatedAt
         };
