@@ -95,4 +95,27 @@ public class RepositoryController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
     }
+
+    [HttpPost("{id:guid}/sync-github-app")]
+    public async Task<IActionResult> SyncGitHubAppInstallation(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var repo = await _repositoryService.SyncGitHubAppInstallationAsync(userId, id, cancellationToken);
+            return Ok(new
+            {
+                appInstalled = repo.InstallationId != null,
+                installationId = repo.InstallationId
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
+        }
+    }
 }

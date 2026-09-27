@@ -8,6 +8,7 @@ interface RepositoryCardProps {
   onDisconnect?: (id: string) => void;
   onViewRules?: (repoId: string) => void;
   onViewActivity?: (repoId: string) => void;
+  onSyncGitHubApp?: (repoId: string) => void;
   isProcessing?: boolean;
 }
 
@@ -18,6 +19,7 @@ export const RepositoryCard: React.FC<RepositoryCardProps> = ({
   onDisconnect,
   onViewRules,
   onViewActivity,
+  onSyncGitHubApp,
   isProcessing = false,
 }) => {
   if (isConnected) {
@@ -35,7 +37,7 @@ export const RepositoryCard: React.FC<RepositoryCardProps> = ({
           <span className="badge badge-success">Connected</span>
         </div>
 
-        {(!connectedRepo.installationId) && (
+        {(!connectedRepo.installationId) ? (
           <div style={{
             marginTop: '1rem',
             padding: '0.5rem',
@@ -47,7 +49,7 @@ export const RepositoryCard: React.FC<RepositoryCardProps> = ({
           }}>
             <strong>Note:</strong> The GitHub App is not installed for this repository. Bot actions will use your personal OAuth token (fallback mode).<br />
             <a 
-              href="https://github.com/settings/apps" 
+              href="https://github.com/apps/event-automation-bot/installations/new" 
               target="_blank" 
               rel="noopener noreferrer"
               style={{ color: 'inherit', textDecoration: 'underline', fontWeight: 'bold' }}
@@ -55,9 +57,30 @@ export const RepositoryCard: React.FC<RepositoryCardProps> = ({
               Install GitHub App
             </a> to improve reliability and security.
           </div>
+        ) : (
+          <div style={{
+            marginTop: '1rem',
+            padding: '0.5rem',
+            backgroundColor: 'var(--success-bg)',
+            color: 'var(--success-text)',
+            borderRadius: '0.25rem',
+            fontSize: '0.75rem',
+            border: '1px solid var(--success-border)'
+          }}>
+            <strong>GitHub App installed</strong>
+          </div>
         )}
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+          {onSyncGitHubApp && !connectedRepo.installationId && (
+            <button
+              onClick={() => onSyncGitHubApp(connectedRepo.id)}
+              disabled={isProcessing}
+              className="btn btn-outline btn-sm"
+            >
+              {isProcessing ? 'Refreshing...' : 'Refresh GitHub App status'}
+            </button>
+          )}
           {onViewRules && (
             <button
               onClick={() => onViewRules(connectedRepo.id)}

@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using GitHubBot.Application.Configuration;
 using GitHubBot.Application.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -16,15 +17,18 @@ public class GitHubAppTokenProvider : IGitHubAppTokenProvider
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
     private readonly GitHubAppOptions _options;
+    private readonly ILogger<GitHubAppTokenProvider> _logger;
 
     public GitHubAppTokenProvider(
         HttpClient httpClient,
         IMemoryCache cache,
-        IOptions<GitHubAppOptions> options)
+        IOptions<GitHubAppOptions> options,
+        ILogger<GitHubAppTokenProvider> logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))
         {
@@ -78,6 +82,48 @@ public class GitHubAppTokenProvider : IGitHubAppTokenProvider
         return tokenResponse.Token;
     }
 
+    public async Task<long?> TryGetGitHubAppInstallationIdAsync(string owner, string repository, CancellationToken cancellationToken = default)
+    {
+        if (!_options.AppId.HasValue || string.IsNullOrWhiteSpace(_options.PrivateKey))
+        {
+            return null;
+        }
+
+        try
+        {
+            string jwt = GenerateGitHubAppJwt(_options.AppId.Value, _options.PrivateKey);
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"https://api.github.com/repos/{owner}/{repository}/installation");
+            
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+            request.Headers.Add("X-GitHub-Api-Version", "2026-03-10");
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("GitHub API failed to get installation for {Owner}/{Repository}: {StatusCode}", owner, repository, response.StatusCode);
+                return null;
+            }
+
+            var installation = await response.Content.ReadFromJsonAsync<GitHubInstallationModel>(cancellationToken: cancellationToken);
+            return installation?.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to synchronize GitHub App installation for repository {Owner}/{Repository}", owner, repository);
+            return null;
+        }
+    }
+
     private string GenerateGitHubAppJwt(long appId, string privateKey)
     {
         using var rsa = RSA.Create();
@@ -118,5 +164,11 @@ public class GitHubAppTokenProvider : IGitHubAppTokenProvider
 
         [JsonPropertyName("expires_at")]
         public DateTime ExpiresAt { get; set; }
+    }
+
+    private class GitHubInstallationModel
+    {
+        [JsonPropertyName("id")]
+        public long Id { get; set; }
     }
 }

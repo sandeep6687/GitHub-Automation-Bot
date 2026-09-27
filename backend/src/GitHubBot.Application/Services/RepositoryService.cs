@@ -11,6 +11,7 @@ public class RepositoryService : IRepositoryService
     private readonly IUserRepository _userRepository;
     private readonly IConnectedRepositoryRepository _connectedRepoRepository;
     private readonly IGitHubApiClient _gitHubApiClient;
+    private readonly IGitHubAppTokenProvider _gitHubAppTokenProvider;
     private readonly ITokenEncryptionService _tokenEncryptionService;
     private readonly string _webhookCallbackUrl;
 
@@ -18,12 +19,14 @@ public class RepositoryService : IRepositoryService
         IUserRepository userRepository,
         IConnectedRepositoryRepository connectedRepoRepository,
         IGitHubApiClient gitHubApiClient,
+        IGitHubAppTokenProvider gitHubAppTokenProvider,
         ITokenEncryptionService tokenEncryptionService,
         string webhookCallbackUrl = "http://localhost:5000/api/webhooks/github")
     {
         _userRepository = userRepository;
         _connectedRepoRepository = connectedRepoRepository;
         _gitHubApiClient = gitHubApiClient;
+        _gitHubAppTokenProvider = gitHubAppTokenProvider;
         _tokenEncryptionService = tokenEncryptionService;
         _webhookCallbackUrl = webhookCallbackUrl;
     }
@@ -57,6 +60,27 @@ public class RepositoryService : IRepositoryService
         CancellationToken cancellationToken = default)
     {
         var repos = await _connectedRepoRepository.GetByUserIdAsync(userId, cancellationToken);
+        bool anyUpdated = false;
+
+        foreach (var repo in repos)
+        {
+            if (repo.InstallationId == null)
+            {
+                var installationId = await _gitHubAppTokenProvider.TryGetGitHubAppInstallationIdAsync(repo.Owner, repo.Name, cancellationToken);
+                if (installationId.HasValue)
+                {
+                    repo.InstallationId = installationId.Value;
+                    repo.UpdatedAt = DateTime.UtcNow;
+                    await _connectedRepoRepository.UpdateAsync(repo, cancellationToken);
+                    anyUpdated = true;
+                }
+            }
+        }
+
+        if (anyUpdated)
+        {
+            repos = await _connectedRepoRepository.GetByUserIdAsync(userId, cancellationToken);
+        }
 
         return repos.Select(r => new ConnectedRepoDto
         {
@@ -192,5 +216,44 @@ public class RepositoryService : IRepositoryService
         }
 
         await _connectedRepoRepository.DeleteAsync(repositoryId, cancellationToken);
+    }
+
+    public async Task<ConnectedRepoDto> SyncGitHubAppInstallationAsync(
+        Guid userId,
+        Guid repositoryId,
+        CancellationToken cancellationToken = default)
+    {
+        var repo = await _connectedRepoRepository.GetByIdAsync(repositoryId, cancellationToken);
+        if (repo == null)
+        {
+            throw new InvalidOperationException("Repository not found.");
+        }
+
+        if (repo.UserId != userId)
+        {
+            throw new UnauthorizedAccessException("Cannot sync a repository you do not own.");
+        }
+
+        var installationId = await _gitHubAppTokenProvider.TryGetGitHubAppInstallationIdAsync(repo.Owner, repo.Name, cancellationToken);
+        
+        if (installationId.HasValue && repo.InstallationId != installationId.Value)
+        {
+            repo.InstallationId = installationId.Value;
+            repo.UpdatedAt = DateTime.UtcNow;
+            await _connectedRepoRepository.UpdateAsync(repo, cancellationToken);
+        }
+
+        return new ConnectedRepoDto
+        {
+            Id = repo.Id,
+            GithubRepositoryId = repo.GithubRepositoryId,
+            FullName = repo.FullName,
+            Owner = repo.Owner,
+            Name = repo.Name,
+            DefaultBranch = repo.DefaultBranch,
+            InstallationId = repo.InstallationId,
+            IsActive = repo.IsActive,
+            CreatedAt = repo.CreatedAt
+        };
     }
 }

@@ -22,4 +22,10 @@ export const repositoryApi = {
       method: 'DELETE',
     });
   },
+
+  syncGitHubApp: (id: string): Promise<{ appInstalled: boolean; installationId: number | null }> => {
+    return apiFetch<{ appInstalled: boolean; installationId: number | null }>(`/api/repositories/${id}/sync-github-app`, {
+      method: 'POST',
+    });
+  },
 };

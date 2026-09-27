@@ -89,6 +89,30 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
     }
   };
 
+    const handleSyncGitHubApp = async (id: string) => {
+    setProcessingId(`sync-${id}`);
+    setFeedback(null);
+    try {
+      const result = await repositoryApi.syncGitHubApp(id);
+      if (result.appInstalled) {
+        setFeedback({ message: 'GitHub App installation detected successfully!', type: 'success' });
+      } else {
+        setFeedback({ message: 'GitHub App is not installed for this repository yet.', type: 'error' });
+      }
+      
+      const [connectedData, availableData] = await Promise.all([
+        repositoryApi.getConnectedRepositories(),
+        repositoryApi.getAvailableRepositories(),
+      ]);
+      setConnected(connectedData);
+      setAvailable(availableData);
+    } catch (err: any) {
+      setFeedback({ message: err.message || 'Failed to sync GitHub App status', type: 'error' });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   if (loading) {
     return <RepositoriesSkeleton />;
   }
@@ -147,7 +171,8 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
                 onDisconnect={handleDisconnect}
                 onViewRules={onSelectRepoForRules}
                 onViewActivity={onSelectRepoForActivity}
-                isProcessing={processingId === repo.id}
+                onSyncGitHubApp={handleSyncGitHubApp}
+                isProcessing={processingId === repo.id || processingId === `sync-${repo.id}`}
               />
             ))}
           </div>

@@ -76,6 +76,7 @@ builder.Services.AddScoped<IRepositoryService>(sp =>
         sp.GetRequiredService<IUserRepository>(),
         sp.GetRequiredService<IConnectedRepositoryRepository>(),
         sp.GetRequiredService<IGitHubApiClient>(),
+        sp.GetRequiredService<IGitHubAppTokenProvider>(),
         sp.GetRequiredService<ITokenEncryptionService>(),
         webhookUrl));
 
