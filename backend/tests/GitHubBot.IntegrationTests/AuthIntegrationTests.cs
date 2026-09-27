@@ -275,8 +275,12 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task ProductionCookie_ShouldHaveSameSiteNone_AndSecure_AndHttpOnly()
+    public async Task ProductionCookie_ShouldHaveSameSiteLax_AndSecure_AndHttpOnly()
     {
+        // In production, the Vercel CDN proxies /api/* to the Render backend server-side,
+        // so the browser always speaks to the same origin (git-hub-automation-bot.vercel.app).
+        // The session cookie therefore only needs SameSite=Lax — not None — which is the
+        // more restrictive (and correct) setting.
         const string rawToken = "gho_prod_test_token";
         const string validCode = "prod_oauth_code";
         const string validState = "prod_state_value";
@@ -328,7 +332,9 @@ public class AuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>
         sessionCookie.Should().NotBeNull();
 
         var cookieHeader = sessionCookie!.ToLowerInvariant();
-        cookieHeader.Should().Contain("samesite=none");
+        // SameSite=Lax: least-permissive setting that works with same-origin Vercel proxy
+        cookieHeader.Should().Contain("samesite=lax");
+        cookieHeader.Should().NotContain("samesite=none");
         cookieHeader.Should().Contain("secure");
         cookieHeader.Should().Contain("httponly");
     }

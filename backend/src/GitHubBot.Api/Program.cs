@@ -85,25 +85,31 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 // 9. Authentication & Session Cookies
+//
+// Architecture note: in production the Vercel CDN proxies /api/* to this backend
+// server-side, so the browser always talks to git-hub-automation-bot.vercel.app.
+// That makes the session cookie same-site (Lax is sufficient; SameSite=None is
+// not needed and not used). appsettings.Production.json sets CookieSameSite=Lax.
+//
+// In local development the Vite dev-server proxy forwards /api/* to localhost:5000,
+// same-origin for cookie purposes, so Lax is also correct there.
+//
+// The explicit Authentication:CookieSameSite config value always wins. The default
+// fallback is Lax. SameSite=None is never auto-applied — it must be set explicitly
+// in config if ever needed for a different deployment topology.
 var cookieName = builder.Configuration["Authentication:CookieName"] ?? "gh_bot_session";
 var sessionMinutes = builder.Configuration.GetValue("Authentication:SessionExpirationMinutes", 1440);
 var frontendUrl = builder.Configuration["FrontendUrl"];
 
-var isCrossSiteFrontend = !string.IsNullOrWhiteSpace(frontendUrl) &&
-    !frontendUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase) &&
-    !frontendUrl.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase);
-
-var isProduction = builder.Environment.IsProduction() || isCrossSiteFrontend;
-
 var sameSiteConfig = builder.Configuration["Authentication:CookieSameSite"];
 var sameSiteMode = !string.IsNullOrEmpty(sameSiteConfig) && Enum.TryParse<SameSiteMode>(sameSiteConfig, true, out var parsedSameSite)
     ? parsedSameSite
-    : (isProduction ? SameSiteMode.None : SameSiteMode.Lax);
+    : SameSiteMode.Lax; // Default: Lax. Override via Authentication:CookieSameSite if needed.
 
 var securePolicyConfig = builder.Configuration["Authentication:CookieSecurePolicy"];
 var securePolicy = !string.IsNullOrEmpty(securePolicyConfig) && Enum.TryParse<CookieSecurePolicy>(securePolicyConfig, true, out var parsedSecurePolicy)
     ? parsedSecurePolicy
-    : (sameSiteMode == SameSiteMode.None ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest);
+    : CookieSecurePolicy.SameAsRequest; // Always in production via appsettings.Production.json
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
