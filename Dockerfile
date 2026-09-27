@@ -10,6 +10,7 @@ COPY backend/src/GitHubBot.Infrastructure/*.csproj ./src/GitHubBot.Infrastructur
 COPY backend/src/GitHubBot.Api/*.csproj ./src/GitHubBot.Api/
 COPY backend/tests/GitHubBot.UnitTests/*.csproj ./tests/GitHubBot.UnitTests/
 COPY backend/tests/GitHubBot.IntegrationTests/*.csproj ./tests/GitHubBot.IntegrationTests/
+COPY backend/tests/GitHubBot.ArchitectureTests/*.csproj ./tests/GitHubBot.ArchitectureTests/
 
 RUN dotnet restore
 
