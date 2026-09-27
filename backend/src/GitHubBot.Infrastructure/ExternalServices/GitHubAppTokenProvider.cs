@@ -86,7 +86,7 @@ public class GitHubAppTokenProvider : IGitHubAppTokenProvider
     {
         if (!_options.AppId.HasValue || string.IsNullOrWhiteSpace(_options.PrivateKey))
         {
-            return null;
+            throw new InvalidOperationException("GitHub App is not configured properly. Missing AppId or PrivateKey.");
         }
 
         try

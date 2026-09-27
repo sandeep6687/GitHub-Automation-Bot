@@ -108,6 +108,26 @@ public class GitHubAppTokenProviderTests
     }
 
     [Fact]
+    public async Task TryGetGitHubAppInstallationIdAsync_ShouldThrowInvalidOperationException_WhenAppIdMissing()
+    {
+        _options.AppId = null;
+        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
+        
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.TryGetGitHubAppInstallationIdAsync("owner", "repo"));
+        Assert.Contains("Missing AppId or PrivateKey", ex.Message);
+    }
+
+    [Fact]
+    public async Task TryGetGitHubAppInstallationIdAsync_ShouldThrowInvalidOperationException_WhenPrivateKeyMissing()
+    {
+        _options.PrivateKey = null;
+        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
+        
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.TryGetGitHubAppInstallationIdAsync("owner", "repo"));
+        Assert.Contains("Missing AppId or PrivateKey", ex.Message);
+    }
+
+    [Fact]
     public async Task TryGetGitHubAppInstallationIdAsync_ShouldReturnNull_When500InternalServerError()
     {
         _httpMessageHandlerMock.Protected()

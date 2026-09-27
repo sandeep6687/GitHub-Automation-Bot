@@ -2,7 +2,7 @@ namespace GitHubBot.Application.Configuration;
 
 public class GitHubAppOptions
 {
-    public const string SectionName = "GitHubApp";
+    public const string SectionName = "GitHub";
 
     public long? AppId { get; set; }
     public string? PrivateKey { get; set; }
