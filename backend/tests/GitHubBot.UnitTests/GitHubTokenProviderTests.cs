@@ -48,7 +48,7 @@ public class GitHubTokenProviderTests
     }
 
     [Fact]
-    public async Task GetTokenForRepositoryAsync_WithoutInstallationId_FallsBackToOAuth()
+    public async Task GetTokenForRepositoryAsync_WithoutInstallationId_ThrowsPermissionException()
     {
         // Arrange
         var repoId = Guid.NewGuid();
@@ -56,16 +56,11 @@ public class GitHubTokenProviderTests
         _repoRepoMock.Setup(x => x.GetByIdAsync(repoId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ConnectedRepository { UserId = userId, InstallationId = null });
 
-        _userRepoMock.Setup(x => x.GetGithubAccountByUserIdAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GithubAccount { EncryptedAccessToken = "encrypted_oauth" });
-
-        _encryptionMock.Setup(x => x.Decrypt("encrypted_oauth")).Returns("decrypted_oauth");
-
         // Act
-        var token = await _provider.GetTokenForRepositoryAsync(repoId);
+        var act = () => _provider.GetTokenForRepositoryAsync(repoId);
 
         // Assert
-        Assert.Equal("decrypted_oauth", token);
+        await Assert.ThrowsAsync<GitHubBot.Domain.Exceptions.GitHubAppPermissionRequiredException>(act);
         _appTokenProviderMock.Verify(x => x.GetInstallationTokenAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

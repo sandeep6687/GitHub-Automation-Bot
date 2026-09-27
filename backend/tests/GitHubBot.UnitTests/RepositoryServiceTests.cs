@@ -122,6 +122,10 @@ public class RepositoryServiceTests
             .Setup(c => c.GetRepositoryByIdAsync(rawToken, ghRepoId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(repoDetails);
 
+        _gitHubAppTokenProviderMock
+            .Setup(p => p.TryGetGitHubAppInstallationIdAsync("octocat", "hello-world", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(165544798L);
+
         string? capturedWebhookSecret = null;
         _gitHubApiClientMock
             .Setup(c => c.CreateWebhookAsync(
@@ -157,10 +161,99 @@ public class RepositoryServiceTests
         savedEntity.Should().NotBeNull();
         savedEntity!.WebhookId.Should().Be(998811L);
         savedEntity.EncryptedWebhookSecret.Should().Be($"enc_{capturedWebhookSecret}");
+        savedEntity.InstallationId.Should().Be(165544798L);
 
         // Security check: raw webhook secret or encrypted secret is not exposed in DTO
         result.GetType().GetProperties().Select(p => p.Name).Should().NotContain("EncryptedWebhookSecret");
         result.GetType().GetProperties().Select(p => p.Name).Should().NotContain("WebhookSecret");
+    }
+
+    [Fact]
+    public async Task Connect_WhenAppNotInstalled_ReturnsPermissionError_AndDoesNotPersist()
+    {
+        var userId = Guid.NewGuid();
+        const long ghRepoId = 12345;
+        const string rawToken = "gho_user_token";
+        const string encToken = "enc_user_token";
+
+        var user = new User { Id = userId, GithubAccount = new GithubAccount { UserId = userId, EncryptedAccessToken = encToken } };
+
+        _userRepositoryMock.Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _tokenEncryptionMock.Setup(e => e.Decrypt(encToken)).Returns(rawToken);
+
+        _gitHubApiClientMock.Setup(c => c.GetRepositoryByIdAsync(rawToken, ghRepoId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AvailableRepoDto { Id = ghRepoId, FullName = "user/repo", Owner = "user", Name = "repo" });
+
+        // Simulate 404 (or 403) resulting in null
+        _gitHubAppTokenProviderMock.Setup(p => p.TryGetGitHubAppInstallationIdAsync("user", "repo", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long?)null);
+
+        var act = () => _service.ConnectRepositoryAsync(userId, ghRepoId);
+
+        await act.Should().ThrowAsync<GitHubBot.Domain.Exceptions.GitHubAppPermissionRequiredException>()
+            .WithMessage("*GitHub App does not have permission*");
+
+        _gitHubApiClientMock.Verify(c => c.CreateWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _connectedRepoRepoMock.Verify(r => r.AddAsync(It.IsAny<ConnectedRepository>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Connect_WhenWebhookCreationFails_CleansUp_AndAborts()
+    {
+        var userId = Guid.NewGuid();
+        const long ghRepoId = 12345;
+        const string encToken = "enc_user_token";
+
+        var user = new User { Id = userId, GithubAccount = new GithubAccount { UserId = userId, EncryptedAccessToken = encToken } };
+        _userRepositoryMock.Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _tokenEncryptionMock.Setup(e => e.Decrypt(encToken)).Returns("raw_token");
+
+        _gitHubApiClientMock.Setup(c => c.GetRepositoryByIdAsync("raw_token", ghRepoId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AvailableRepoDto { Id = ghRepoId, Owner = "u", Name = "r" });
+
+        _gitHubAppTokenProviderMock.Setup(p => p.TryGetGitHubAppInstallationIdAsync("u", "r", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(123456L);
+
+        _gitHubApiClientMock.Setup(c => c.CreateWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Exception("GitHub API down"));
+
+        var act = () => _service.ConnectRepositoryAsync(userId, ghRepoId);
+
+        await act.Should().ThrowAsync<Exception>().WithMessage("Failed to create webhook. Repository connection aborted.");
+        _connectedRepoRepoMock.Verify(r => r.AddAsync(It.IsAny<ConnectedRepository>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Connect_WhenPersistenceFails_AfterWebhookCreation_DeletesWebhook()
+    {
+        var userId = Guid.NewGuid();
+        const long ghRepoId = 12345;
+        const string encToken = "enc_user_token";
+        const string rawToken = "raw_token";
+        const long webhookId = 998811L;
+
+        var user = new User { Id = userId, GithubAccount = new GithubAccount { UserId = userId, EncryptedAccessToken = encToken } };
+        _userRepositoryMock.Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _tokenEncryptionMock.Setup(e => e.Decrypt(encToken)).Returns(rawToken);
+
+        _gitHubApiClientMock.Setup(c => c.GetRepositoryByIdAsync(rawToken, ghRepoId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AvailableRepoDto { Id = ghRepoId, Owner = "u", Name = "r" });
+
+        _gitHubAppTokenProviderMock.Setup(p => p.TryGetGitHubAppInstallationIdAsync("u", "r", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(123456L);
+
+        _gitHubApiClientMock.Setup(c => c.CreateWebhookAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(webhookId);
+
+        _connectedRepoRepoMock.Setup(r => r.AddAsync(It.IsAny<ConnectedRepository>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Exception("Database down"));
+
+        var act = () => _service.ConnectRepositoryAsync(userId, ghRepoId);
+
+        await act.Should().ThrowAsync<Exception>()
+            .WithMessage("Failed to persist repository connection. GitHub webhook was cleaned up.");
+
+        _gitHubApiClientMock.Verify(c => c.DeleteWebhookAsync(rawToken, "u", "r", webhookId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -206,6 +206,8 @@ app.Use(async (context, next) =>
     await memStream.CopyToAsync(originalBody);
 });
 
+app.UseMiddleware<GitHubBot.Api.Middleware.ExceptionHandlingMiddleware>();
+
 app.UseForwardedHeaders();
 app.UseCors("FrontendPolicy");
 app.UseAuthentication();

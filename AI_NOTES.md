@@ -1,43 +1,36 @@
-# AI Implementation Notes
+# AI Collaboration Notes
 
-This document tracks engineering decisions, architectural trade-offs, and progress across vertical implementation slices.
+## 1. AI Tools/Models Used
+This project was developed through pair-programming between a human engineer and **Antigravity**, an agentic AI coding assistant powered by Gemini.
 
----
+## 2. Division of Labor
+**Human Responsibilities:**
+- Architectural constraints (Modular Monolith, Clean Architecture).
+- Security definitions (Encryption, HMAC).
+- Defining the boundaries for reliability (PostgreSQL locking logic, Retry models).
+- Identifying scope and requirements.
 
-## Phase 0: Foundation
+**AI Responsibilities:**
+- Rapidly implementing backend boilerplate (Controllers, DTOs, EF Core mappings).
+- Translating architectural constraints into functional C# code.
+- Building out the React frontend components, including robust UX paradigms like the dual-loading system.
+- Diagnosing and fixing compilation and integration bugs during iterative development.
+- Writing extensive unit and architecture tests.
 
-### Actions Completed
-1. **Solution Structure**: Created `GitHubAutomationBot.sln` with 4 source projects (`GitHubBot.Domain`, `GitHubBot.Application`, `GitHubBot.Infrastructure`, `GitHubBot.Api`) and 2 test projects (`GitHubBot.UnitTests`, `GitHubBot.IntegrationTests`).
-2. **Project References**:
-   - `Domain`: 0 references, 0 NuGet packages.
-   - `Application`: References `Domain` only.
-   - `Infrastructure`: References `Domain` and `Application`.
-   - `Api`: References `Application` and `Infrastructure`.
-   - `UnitTests`: References `Domain`, `Application`, `Infrastructure`, with `Moq` and `FluentAssertions`.
-   - `IntegrationTests`: References all layers including `Api`.
-3. **Architectural Guardrails (`ArchitectureTests.cs`)**:
-   - Enforces Domain has zero NuGet dependencies (no EF Core, no Npgsql, no Polly, no Newtonsoft).
-   - Enforces Application does not reference Infrastructure.
-   - Enforces Application references Domain.
-   - Enforces Infrastructure references Domain and Application.
-4. **Target Framework & Runtime Roll-Forward**:
-   - All projects target `net8.0` in alignment with production specification (`AGENTS.md`).
-   - Added `<RollForward>Major</RollForward>` to executable and test projects so local environments running .NET 9 SDK/runtime can execute tests and builds seamlessly without breaking the .NET 8 target.
-5. **Configuration Skeleton**:
-   - Added `appsettings.json` and `appsettings.Development.json` in `GitHubBot.Api` with sections for ConnectionStrings, GitHub OAuth, Slack OAuth, JWT, AES Encryption, and Worker parameters.
-   - Created `.env.example` mapping all environment variables.
-6. **Containerization**:
-   - Multi-stage `Dockerfile` with test execution before final publish.
-   - `docker-compose.yml` defining PostgreSQL 16 container and API service with health checks.
-7. **Verification**:
-   - `dotnet build` succeeds with 0 errors, 0 warnings.
-   - `dotnet test` executes and passes all tests (including architectural boundary tests).
+## 3. Important Human Architectural Decisions
+- **DB-backed queue instead of Kafka**: Kafka is overkill for a lightweight GitHub bot. Using PostgreSQL `SKIP LOCKED` allowed us to build a highly concurrent event-processing background worker on a free-tier database.
+- **Repository-specific webhook secrets**: Instead of one global secret, every repository gets a uniquely generated, encrypted secret, significantly reducing the blast radius of a compromised token.
+- **Idempotent action execution**: The system tracks action executions per event, allowing it to skip previously successful actions (like sending a Slack message) if an event is retried due to a subsequent failure.
 
----
+## 4. Hardest AI-Assisted Mistake
+**The GitHub App Constructor Mismatch**
+During Phase 14, the AI was tasked with implementing GitHub App authentication detection. The AI successfully updated the `RepositoryService` and `GitHubAppTokenProvider` classes to accept new dependencies (e.g., `IGitHubAppTokenProvider` and `ILogger`).
 
-## Next Up: Phase 1 (Database + Domain)
-- Create Domain entities (`User`, `GithubAccount`, `ConnectedRepository`, `Rule`, `RuleCondition`, `RuleAction`, `WebhookEvent`, `ActionExecution`).
-- Note requirement from review: `WebhookEvent.RepositoryId` is `NOT NULL`.
-- Define repository interfaces in Domain.
-- EF Core DbContext + Fluent API configurations in Infrastructure.
-- Initial migration.
+*The Mistake*: The AI updated the production API injection perfectly but forgot to update the mock constructions in the Unit Test suite (`RepositoryServiceTests` and `GitHubAppTokenProviderTests`).
+*How it was caught*: The application compiled and ran locally, but the Docker build on Render failed explicitly during `dotnet test` because of the signature mismatch (`CS1503`).
+*How it was fixed*: The AI was prompted with the Render failure logs. It inspected the actual production constructors, updated the test constructors to match, and injected the required `Mock<T>` objects, ultimately passing the suite.
+*Lesson Learned*: When AI modifies core class signatures, explicitly prompting it to update the test suite simultaneously prevents broken CI pipelines.
+
+## 5. What would be improved with more time
+- **Abstracting the Database Provider**: We are tightly coupled to PostgreSQL currently. More time would allow abstracting EF Core configurations to seamlessly swap between SQLite (for local devs) and Postgres.
+- **Enhanced AI Analytics**: Currently, AI is used solely for triage text generation. With more time, we'd implement vector embeddings to allow the bot to identify duplicate issues based on semantic similarity to past issues.

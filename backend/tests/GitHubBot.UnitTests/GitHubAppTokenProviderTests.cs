@@ -73,4 +73,51 @@ public class GitHubAppTokenProviderTests
             ItExpr.IsAny<CancellationToken>()
         );
     }
+
+    [Fact]
+    public async Task TryGetGitHubAppInstallationIdAsync_ShouldReturnId_When200OK()
+    {
+        _httpMessageHandlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent("{\"id\": 165544798}")
+            });
+
+        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
+        var result = await provider.TryGetGitHubAppInstallationIdAsync("owner", "repo");
+
+        Assert.Equal(165544798, result);
+    }
+
+    [Fact]
+    public async Task TryGetGitHubAppInstallationIdAsync_ShouldReturnNull_When404NotFound()
+    {
+        _httpMessageHandlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.NotFound
+            });
+
+        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
+        var result = await provider.TryGetGitHubAppInstallationIdAsync("owner", "repo");
+
+        Assert.Null(result); // Must NOT throw exception
+    }
+
+    [Fact]
+    public async Task TryGetGitHubAppInstallationIdAsync_ShouldReturnNull_When500InternalServerError()
+    {
+        _httpMessageHandlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.InternalServerError
+            });
+
+        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
+        await Assert.ThrowsAsync<HttpRequestException>(() => provider.TryGetGitHubAppInstallationIdAsync("owner", "repo"));
+    }
 }

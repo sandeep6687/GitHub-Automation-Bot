@@ -47,7 +47,7 @@ export const RepositoryCard: React.FC<RepositoryCardProps> = ({
             fontSize: '0.75rem',
             border: '1px solid var(--warning-border, #ffeeba)'
           }}>
-            <strong>Note:</strong> The GitHub App is not installed for this repository. Bot actions will use your personal OAuth token (fallback mode).<br />
+            <strong>Note:</strong> GitHub App permission required. This repository cannot be connected until the GitHub App has access to it.<br />
             <a 
               href="https://github.com/apps/event-automation-bot/installations/new" 
               target="_blank" 
@@ -55,7 +55,7 @@ export const RepositoryCard: React.FC<RepositoryCardProps> = ({
               style={{ color: 'inherit', textDecoration: 'underline', fontWeight: 'bold' }}
             >
               Install GitHub App
-            </a> to improve reliability and security.
+            </a>
           </div>
         ) : (
           <div style={{

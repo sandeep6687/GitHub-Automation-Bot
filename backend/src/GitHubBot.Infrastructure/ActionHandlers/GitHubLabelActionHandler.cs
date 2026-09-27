@@ -89,15 +89,13 @@ public class GitHubLabelActionHandler : IActionHandler
 
         var sanitizedRequest = JsonSerializer.Serialize(new { label = normalizedLabel });
         var sw = Stopwatch.StartNew();
-        string authMode = context.Repository.InstallationId.HasValue && context.Repository.InstallationId.Value > 0 ? "GitHubApp" : "OAuth";
 
         _logger.LogInformation(
-            "GitHubLabelAction started Repository={Owner}/{Repo} IssueNumber={IssueNumber} Label={Label} AuthMode={AuthMode}",
+            "GitHubLabelAction started Repository={Owner}/{Repo} IssueNumber={IssueNumber} Label={Label}",
             context.Repository.Owner,
             context.Repository.Name,
             context.IssueOrPrNumber.Value,
-            normalizedLabel,
-            authMode);
+            normalizedLabel);
 
         try
         {

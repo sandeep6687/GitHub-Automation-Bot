@@ -91,6 +91,7 @@ public class GitHubAppTokenProvider : IGitHubAppTokenProvider
 
         try
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             string jwt = GenerateGitHubAppJwt(_options.AppId.Value, _options.PrivateKey);
 
             using var request = new HttpRequestMessage(
@@ -102,25 +103,57 @@ public class GitHubAppTokenProvider : IGitHubAppTokenProvider
             request.Headers.Add("X-GitHub-Api-Version", "2026-03-10");
 
             using var response = await _httpClient.SendAsync(request, cancellationToken);
+            sw.Stop();
             
+            _logger.LogInformation("GitHub App lookup for {Owner}/{Repo} took {ElapsedMs}ms. Status: {StatusCode} {ReasonPhrase}", 
+                owner, repository, sw.ElapsedMilliseconds, (int)response.StatusCode, response.ReasonPhrase);
+
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return null;
             }
+            
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                _logger.LogError("GitHub API returned 401 Unauthorized during App installation lookup. Verify AppId and PrivateKey.");
+                throw new InvalidOperationException("GitHub App authentication failed. Please verify configuration.");
+            }
+            
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                _logger.LogWarning("GitHub API returned 403 Forbidden for {Owner}/{Repository}. Rate limited or blocked.", owner, repository);
+                return null; // Return null + warning as requested
+            }
+            
+            if ((int)response.StatusCode >= 500)
+            {
+                _logger.LogWarning("GitHub API returned {StatusCode} (transient failure) for {Owner}/{Repository}.", response.StatusCode, owner, repository);
+                throw new HttpRequestException($"GitHub API transient failure: {response.StatusCode}");
+            }
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("GitHub API failed to get installation for {Owner}/{Repository}: {StatusCode}", owner, repository, response.StatusCode);
-                return null;
+                _logger.LogWarning("GitHub API unexpected failure for {Owner}/{Repository}: {StatusCode}", owner, repository, response.StatusCode);
+                throw new HttpRequestException($"GitHub API returned unexpected status {response.StatusCode}");
             }
 
             var installation = await response.Content.ReadFromJsonAsync<GitHubInstallationModel>(cancellationToken: cancellationToken);
             return installation?.Id;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network or transient failure looking up GitHub App installation for {Owner}/{Repository}", owner, repository);
+            throw; // propagate so it doesn't overwrite InstallationId
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Configuration or auth failure looking up GitHub App installation for {Owner}/{Repository}", owner, repository);
+            throw; 
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to synchronize GitHub App installation for repository {Owner}/{Repository}", owner, repository);
-            return null;
+            throw new InvalidOperationException("Unexpected error during GitHub App installation lookup.", ex);
         }
     }
 
@@ -147,7 +180,7 @@ public class GitHubAppTokenProvider : IGitHubAppTokenProvider
         var payload = new JwtPayload
         {
             { "iat", new DateTimeOffset(now.AddSeconds(-60)).ToUnixTimeSeconds() },
-            { "exp", new DateTimeOffset(now.AddMinutes(10)).ToUnixTimeSeconds() },
+            { "exp", new DateTimeOffset(now.AddMinutes(9)).ToUnixTimeSeconds() },
             { "iss", appId.ToString() }
         };
 

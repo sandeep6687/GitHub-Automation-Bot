@@ -3,6 +3,7 @@ import type { ConnectedRepository, AvailableRepository } from '../types/reposito
 import { repositoryApi } from '../api/repositoryApi';
 import { RepositoryCard } from '../components/RepositoryCard';
 import { RepositoriesSkeleton, PageErrorState } from '../components/Skeleton';
+import { DismissibleAlert } from '../components/DismissibleAlert';
 
 interface RepositoriesPageProps {
   onSelectRepoForRules: (repoId: string) => void;
@@ -133,19 +134,11 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
       </div>
 
       {feedback && (
-        <div
-          style={{
-            padding: '0.875rem 1rem',
-            borderRadius: '0.375rem',
-            marginBottom: '1.5rem',
-            fontSize: '0.875rem',
-            backgroundColor: feedback.type === 'success' ? 'var(--success-bg)' : 'var(--danger-bg)',
-            color: feedback.type === 'success' ? 'var(--success-text)' : 'var(--danger-text)',
-            border: `1px solid ${feedback.type === 'success' ? 'var(--success-border)' : 'var(--danger-border)'}`,
-          }}
-        >
-          {feedback.message}
-        </div>
+        <DismissibleAlert
+          message={feedback.message}
+          type={feedback.type}
+          onDismiss={() => setFeedback(null)}
+        />
       )}
 
       {/* Connected Repositories Section */}

@@ -122,9 +122,12 @@ public class RepositoryService : IRepositoryService
             throw new InvalidOperationException("Repository not found on GitHub or access was denied.");
         }
 
-        // 1b. Check if GitHub App is installed
-        var installationId = await _gitHubApiClient.GetAppInstallationIdForRepositoryAsync(
-            accessToken, repoDetails.Owner, repoDetails.Name, cancellationToken);
+        // 1b. Check if GitHub App is installed via GitHubAppTokenProvider (JWT authenticated)
+        var installationId = await _gitHubAppTokenProvider.TryGetGitHubAppInstallationIdAsync(repoDetails.Owner, repoDetails.Name, cancellationToken);
+        if (installationId == null)
+        {
+            throw new GitHubBot.Domain.Exceptions.GitHubAppPermissionRequiredException("GitHub App does not have permission to access this repository. Please install the GitHub App for this repository and try again.");
+        }
 
         // 2. Generate cryptographically secure random per-repository webhook secret
         var secretBytes = new byte[32];
@@ -152,6 +155,10 @@ public class RepositoryService : IRepositoryService
             // Proceed with connecting the repository locally so rule configuration and local events work.
             webhookId = null;
         }
+        catch (Exception ex)
+        {
+            throw new Exception("Failed to create webhook. Repository connection aborted.", ex);
+        }
 
         // 5. Persist ConnectedRepository
         var connectedRepo = new ConnectedRepository
@@ -171,7 +178,26 @@ public class RepositoryService : IRepositoryService
             UpdatedAt = DateTime.UtcNow
         };
 
-        var saved = await _connectedRepoRepository.AddAsync(connectedRepo, cancellationToken);
+        ConnectedRepository saved;
+        try
+        {
+            saved = await _connectedRepoRepository.AddAsync(connectedRepo, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            if (webhookId.HasValue)
+            {
+                try
+                {
+                    await _gitHubApiClient.DeleteWebhookAsync(accessToken, repoDetails.Owner, repoDetails.Name, webhookId.Value, cancellationToken);
+                }
+                catch
+                {
+                    // Best effort cleanup. If it fails, there's not much else we can do.
+                }
+            }
+            throw new Exception("Failed to persist repository connection. GitHub webhook was cleaned up.", ex);
+        }
 
         return new ConnectedRepoDto
         {

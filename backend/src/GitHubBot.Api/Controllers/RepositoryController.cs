@@ -71,6 +71,10 @@ public class RepositoryController : ControllerBase
 
             return Ok(connected);
         }
+        catch (GitHubBot.Domain.Exceptions.GitHubAppPermissionRequiredException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             if (ex.Message.Contains("already connected", StringComparison.OrdinalIgnoreCase))

@@ -30,17 +30,13 @@ public class GitHubTokenProvider : IGitHubTokenProvider
             throw new InvalidOperationException($"Connected repository {repositoryId} not found.");
         }
 
-        if (repo.InstallationId.HasValue && repo.InstallationId.Value > 0)
+        if (!repo.InstallationId.HasValue || repo.InstallationId.Value <= 0)
         {
-            return await _appTokenProvider.GetInstallationTokenAsync(repo.InstallationId.Value, cancellationToken);
+            throw new GitHubBot.Domain.Exceptions.GitHubAppPermissionRequiredException(
+                $"GitHub App permission is required to perform actions on repository {repo.Owner}/{repo.Name}."
+            );
         }
 
-        var githubAccount = await _userRepository.GetGithubAccountByUserIdAsync(repo.UserId, cancellationToken);
-        if (githubAccount == null || string.IsNullOrWhiteSpace(githubAccount.EncryptedAccessToken))
-        {
-            throw new InvalidOperationException($"No GitHub account or access token found for user {repo.UserId}.");
-        }
-
-        return _encryptionService.Decrypt(githubAccount.EncryptedAccessToken);
+        return await _appTokenProvider.GetInstallationTokenAsync(repo.InstallationId.Value, cancellationToken);
     }
 }
