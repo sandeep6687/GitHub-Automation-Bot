@@ -5,9 +5,9 @@ namespace GitHubBot.UnitTests;
 public class GitHubAppOptionsTests
 {
     [Fact]
-    public void GitHubAppOptions_SectionName_ShouldBeGitHub()
+    public void GitHubAppOptions_SectionName_ShouldBeGitHubApp()
     {
-        Assert.Equal("GitHub", GitHubAppOptions.SectionName);
+        Assert.Equal("GitHubApp", GitHubAppOptions.SectionName);
     }
     
     [Fact]

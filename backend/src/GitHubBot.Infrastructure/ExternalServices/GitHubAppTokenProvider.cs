@@ -122,7 +122,7 @@ public class GitHubAppTokenProvider : IGitHubAppTokenProvider
             if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
             {
                 _logger.LogWarning("GitHub API returned 403 Forbidden for {Owner}/{Repository}. Rate limited or blocked.", owner, repository);
-                return null; // Return null + warning as requested
+                throw new InvalidOperationException("GitHub App does not have permission to access this repository.");
             }
             
             if ((int)response.StatusCode >= 500)

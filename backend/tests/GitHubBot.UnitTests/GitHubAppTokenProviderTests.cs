@@ -128,7 +128,37 @@ public class GitHubAppTokenProviderTests
     }
 
     [Fact]
-    public async Task TryGetGitHubAppInstallationIdAsync_ShouldReturnNull_When500InternalServerError()
+    public async Task TryGetGitHubAppInstallationIdAsync_ShouldThrowInvalidOperationException_When401Unauthorized()
+    {
+        _httpMessageHandlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.Unauthorized
+            });
+
+        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.TryGetGitHubAppInstallationIdAsync("owner", "repo"));
+        Assert.Contains("GitHub App authentication failed", ex.Message);
+    }
+
+    [Fact]
+    public async Task TryGetGitHubAppInstallationIdAsync_ShouldThrowInvalidOperationException_When403Forbidden()
+    {
+        _httpMessageHandlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.Forbidden
+            });
+
+        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.TryGetGitHubAppInstallationIdAsync("owner", "repo"));
+        Assert.Contains("permission to access this repository", ex.Message);
+    }
+
+    [Fact]
+    public async Task TryGetGitHubAppInstallationIdAsync_ShouldThrowHttpRequestException_When500InternalServerError()
     {
         _httpMessageHandlerMock.Protected()
             .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
