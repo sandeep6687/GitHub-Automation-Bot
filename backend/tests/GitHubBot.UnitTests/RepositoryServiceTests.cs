@@ -13,6 +13,7 @@ public class RepositoryServiceTests
     private readonly Mock<IUserRepository> _userRepositoryMock = new();
     private readonly Mock<IConnectedRepositoryRepository> _connectedRepoRepoMock = new();
     private readonly Mock<IGitHubApiClient> _gitHubApiClientMock = new();
+    private readonly Mock<IGitHubAppTokenProvider> _gitHubAppTokenProviderMock = new();
     private readonly Mock<ITokenEncryptionService> _tokenEncryptionMock = new();
     private readonly RepositoryService _service;
     private const string WebhookUrl = "https://bot.example.com/api/webhooks/github";
@@ -23,6 +24,7 @@ public class RepositoryServiceTests
             _userRepositoryMock.Object,
             _connectedRepoRepoMock.Object,
             _gitHubApiClientMock.Object,
+            _gitHubAppTokenProviderMock.Object,
             _tokenEncryptionMock.Object,
             WebhookUrl);
     }

@@ -55,7 +55,7 @@ public class GitHubAppTokenProviderTests
             })
             .Verifiable();
 
-        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object);
+        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
 
         // Act
         var token1 = await provider.GetInstallationTokenAsync(999);
