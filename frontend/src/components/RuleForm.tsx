@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Rule, CreateRuleDto, UpdateRuleDto, RuleCondition, RuleAction } from '../types/rule';
 
 interface RuleFormProps {
@@ -32,6 +32,13 @@ export const RuleForm: React.FC<RuleFormProps> = ({
   );
 
   const [formError, setFormError] = useState<string | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (formError && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [formError]);
 
   const handleAddCondition = () => {
     setConditions([
@@ -117,7 +124,7 @@ export const RuleForm: React.FC<RuleFormProps> = ({
         setFormError('Please enter a comment body for the Add Comment action.');
         return;
       }
-      if (a.actionType === 'SlackNotify' && !a.configuration.message?.trim()) {
+      if (a.actionType === 'SlackNotify' && !(a.configuration.message?.trim() || a.configuration.text?.trim())) {
         setFormError('Please enter a message template for the Slack Notification action.');
         return;
       }
@@ -153,7 +160,7 @@ export const RuleForm: React.FC<RuleFormProps> = ({
       </h2>
 
       {formError && (
-        <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger-text)', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1.25rem', fontSize: '0.875rem' }}>
+        <div ref={errorRef} style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger-text)', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1.25rem', fontSize: '0.875rem' }}>
           {formError}
         </div>
       )}
@@ -354,7 +361,7 @@ export const RuleForm: React.FC<RuleFormProps> = ({
                 <textarea
                   className="form-textarea"
                   placeholder="e.g. 🐛 Bug detected in {{repository}}: {{title}} by {{author}} — {{url}}"
-                  value={act.configuration.message || ''}
+                  value={act.configuration.message || act.configuration.text || ''}
                   onChange={(e) => handleActionConfigChange(idx, 'message', e.target.value)}
                   required
                 />

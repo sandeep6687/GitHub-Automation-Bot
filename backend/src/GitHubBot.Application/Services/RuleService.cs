@@ -284,9 +284,9 @@ public class RuleService : IRuleService
         {
             if (string.IsNullOrWhiteSpace(act.ActionType) ||
                 !Enum.TryParse<ActionType>(act.ActionType, true, out var at) ||
-                (at != ActionType.AddLabel && at != ActionType.AddComment && at != ActionType.SlackNotify && at != ActionType.SlackNotification))
+                (at != ActionType.AddLabel && at != ActionType.AddComment && at != ActionType.SlackNotify && at != ActionType.SlackNotification && at != ActionType.AiTriage))
             {
-                throw new ArgumentException($"Invalid action type: '{act.ActionType}'. Supported actions: AddLabel, AddComment, SlackNotify.");
+                throw new ArgumentException($"Invalid action type: '{act.ActionType}'. Supported actions: AddLabel, AddComment, SlackNotify, AiTriage.");
             }
 
             NormalizeAndValidateActionConfig(at, act.Configuration);
@@ -322,13 +322,24 @@ public class RuleService : IRuleService
 
             case ActionType.SlackNotify:
             case ActionType.SlackNotification:
-                if (!configElement.TryGetProperty("message", out var msgProp) ||
-                    msgProp.ValueKind != JsonValueKind.String ||
-                    string.IsNullOrWhiteSpace(msgProp.GetString()))
+                string? message = null;
+                if (configElement.TryGetProperty("message", out var msgProp) && msgProp.ValueKind == JsonValueKind.String)
+                {
+                    message = msgProp.GetString();
+                }
+                else if (configElement.TryGetProperty("text", out var textProp) && textProp.ValueKind == JsonValueKind.String)
+                {
+                    message = textProp.GetString();
+                }
+
+                if (string.IsNullOrWhiteSpace(message))
                 {
                     throw new ArgumentException("SlackNotify action requires a non-empty 'message' configuration property.");
                 }
-                return JsonSerializer.Serialize(new { message = msgProp.GetString()!.Trim() });
+                return JsonSerializer.Serialize(new { message = message.Trim() });
+
+            case ActionType.AiTriage:
+                return "{}";
 
             default:
                 throw new ArgumentException($"Unsupported action type: {actionType}");
@@ -382,6 +393,7 @@ public class RuleService : IRuleService
                     {
                         ActionType.GithubAddLabel => "AddLabel",
                         ActionType.GithubAddComment => "AddComment",
+                        ActionType.SlackNotification => "SlackNotify",
                         _ => a.ActionType.ToString()
                     },
                     ExecutionOrder = a.ExecutionOrder,

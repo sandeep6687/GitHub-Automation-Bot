@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import type { ConnectedRepository } from '../types/repository';
 import type { Rule, CreateRuleDto, UpdateRuleDto } from '../types/rule';
 import { repositoryApi } from '../api/repositoryApi';
@@ -20,6 +20,13 @@ export const RulesPage: React.FC<RulesPageProps> = ({ initialRepoId }) => {
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const feedbackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (feedback && feedbackRef.current) {
+      feedbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [feedback]);
 
   useEffect(() => {
     loadRepositories();
@@ -145,6 +152,7 @@ export const RulesPage: React.FC<RulesPageProps> = ({ initialRepoId }) => {
 
       {feedback && (
         <div
+          ref={feedbackRef}
           style={{
             padding: '0.875rem 1rem',
             borderRadius: '0.375rem',
