@@ -197,6 +197,7 @@ public class WebhookEventRepository : IWebhookEventRepository
     public async Task UpdateStatusAsync(
         Guid id,
         EventStatus status,
+        string? parsedData = null,
         string? lastError = null,
         DateTime? nextRetryAt = null,
         CancellationToken cancellationToken = default)
@@ -205,6 +206,7 @@ public class WebhookEventRepository : IWebhookEventRepository
         if (evt != null)
         {
             evt.Status = status;
+            evt.ParsedData = parsedData;
             evt.LastError = lastError;
             evt.NextRetryAt = nextRetryAt;
             evt.UpdatedAt = DateTime.UtcNow;
