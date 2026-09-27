@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { UserProfile } from './types/auth';
 import { authApi } from './api/authApi';
 import { Layout } from './components/Layout';
-import { LoadingState } from './components/LoadingState';
+import { AppStartupLoader } from './components/AppStartupLoader';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { RepositoriesPage } from './pages/RepositoriesPage';
@@ -12,6 +12,7 @@ import { ActivityPage } from './pages/ActivityPage';
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'repositories' | 'rules' | 'activity'>('dashboard');
   const [activeRepoId, setActiveRepoId] = useState<string | null>(null);
 
@@ -20,10 +21,17 @@ export function App() {
   }, []);
 
   const checkAuthentication = async () => {
+    setCheckingAuth(true);
+    setAuthError(null);
     try {
       const profile = await authApi.getCurrentUser();
       setUser(profile);
-    } catch {
+    } catch (err: any) {
+      // 401 means unauthenticated, which is expected for logged out users.
+      // Other errors might mean API is down.
+      if (err.message && !err.message.includes('401')) {
+        setAuthError(err.message);
+      }
       setUser(null);
     } finally {
       setCheckingAuth(false);
@@ -52,7 +60,11 @@ export function App() {
   };
 
   if (checkingAuth) {
-    return <LoadingState message="Checking authenticated session..." />;
+    return <AppStartupLoader />;
+  }
+
+  if (authError) {
+    return <AppStartupLoader error={authError} onRetry={checkAuthentication} />;
   }
 
   if (!user) {

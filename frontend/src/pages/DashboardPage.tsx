@@ -3,7 +3,7 @@ import type { ConnectedRepository } from '../types/repository';
 import { repositoryApi } from '../api/repositoryApi';
 import { ruleApi } from '../api/ruleApi';
 import { activityApi } from '../api/activityApi';
-import { LoadingState } from '../components/LoadingState';
+import { DashboardSkeleton, PageErrorState } from '../components/Skeleton';
 
 interface DashboardPageProps {
   onNavigate: (tab: 'dashboard' | 'repositories' | 'rules' | 'activity') => void;
@@ -11,6 +11,7 @@ interface DashboardPageProps {
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [connectedRepos, setConnectedRepos] = useState<ConnectedRepository[]>([]);
   const [activeRulesCount, setActiveRulesCount] = useState<number>(0);
   const [recentEventsCount, setRecentEventsCount] = useState<number>(0);
@@ -22,6 +23,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
   const loadDashboardMetrics = async () => {
     setLoading(true);
+    setError(false);
     try {
       const repos = await repositoryApi.getConnectedRepositories();
       setConnectedRepos(repos);
@@ -30,31 +32,44 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       let totalRecentEvents = 0;
       let totalFailedEvents = 0;
 
-      for (const repo of repos) {
-        try {
-          const rules = await ruleApi.getRules(repo.id);
-          totalActiveRules += rules.filter(r => r.enabled).length;
+      // Parallelize requests for all repositories using Promise.allSettled
+      const repoPromises = repos.map(async (repo) => {
+        const [rulesRes, activityRes] = await Promise.allSettled([
+          ruleApi.getRules(repo.id),
+          activityApi.getActivity(repo.id, { limit: 50 })
+        ]);
 
-          const activity = await activityApi.getActivity(repo.id, { limit: 50 });
-          totalRecentEvents += activity.items.length;
-          totalFailedEvents += activity.items.filter(e => e.status === 'Failed' || e.status === 'Retrying').length;
-        } catch {
-          // Non-blocking per repository
+        if (rulesRes.status === 'fulfilled') {
+          totalActiveRules += rulesRes.value.filter(r => r.enabled).length;
         }
-      }
+
+        if (activityRes.status === 'fulfilled') {
+          totalRecentEvents += activityRes.value.items.length;
+          totalFailedEvents += activityRes.value.items.filter(
+            e => e.status === 'Failed' || e.status === 'Retrying'
+          ).length;
+        }
+      });
+
+      await Promise.all(repoPromises);
 
       setActiveRulesCount(totalActiveRules);
       setRecentEventsCount(totalRecentEvents);
       setFailedEventsCount(totalFailedEvents);
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
+      setError(true);
     } finally {
       setLoading(false);
     }
   };
 
   if (loading) {
-    return <LoadingState message="Loading dashboard metrics..." />;
+    return <DashboardSkeleton />;
+  }
+
+  if (error) {
+    return <PageErrorState onRetry={loadDashboardMetrics} />;
   }
 
   return (

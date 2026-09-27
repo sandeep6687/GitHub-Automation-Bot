@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { ConnectedRepository, AvailableRepository } from '../types/repository';
 import { repositoryApi } from '../api/repositoryApi';
 import { RepositoryCard } from '../components/RepositoryCard';
-import { LoadingState } from '../components/LoadingState';
+import { RepositoriesSkeleton, PageErrorState } from '../components/Skeleton';
 
 interface RepositoriesPageProps {
   onSelectRepoForRules: (repoId: string) => void;
@@ -14,6 +14,7 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
   onSelectRepoForActivity,
 }) => {
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState(false);
   const [connected, setConnected] = useState<ConnectedRepository[]>([]);
   const [available, setAvailable] = useState<AvailableRepository[]>([]);
   const [processingId, setProcessingId] = useState<string | number | null>(null);
@@ -25,6 +26,7 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
 
   const loadRepositories = async () => {
     setLoading(true);
+    setPageError(false);
     setFeedback(null);
     try {
       const [connectedData, availableData] = await Promise.all([
@@ -34,7 +36,7 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
       setConnected(connectedData);
       setAvailable(availableData);
     } catch (err: any) {
-      setFeedback({ message: err.message || 'Failed to load repositories', type: 'error' });
+      setPageError(true);
     } finally {
       setLoading(false);
     }
@@ -49,7 +51,13 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
         message: `Successfully connected ${newRepo.fullName}! Webhook registered with GitHub.`,
         type: 'success',
       });
-      await loadRepositories();
+      // Silent reload behind the scenes to avoid full page skeleton
+      const [connectedData, availableData] = await Promise.all([
+        repositoryApi.getConnectedRepositories(),
+        repositoryApi.getAvailableRepositories(),
+      ]);
+      setConnected(connectedData);
+      setAvailable(availableData);
     } catch (err: any) {
       setFeedback({ message: err.message || 'Failed to connect repository', type: 'error' });
     } finally {
@@ -67,7 +75,13 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
     try {
       await repositoryApi.disconnectRepository(id);
       setFeedback({ message: 'Repository disconnected successfully.', type: 'success' });
-      await loadRepositories();
+      // Silent reload behind the scenes
+      const [connectedData, availableData] = await Promise.all([
+        repositoryApi.getConnectedRepositories(),
+        repositoryApi.getAvailableRepositories(),
+      ]);
+      setConnected(connectedData);
+      setAvailable(availableData);
     } catch (err: any) {
       setFeedback({ message: err.message || 'Failed to disconnect repository', type: 'error' });
     } finally {
@@ -76,7 +90,11 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
   };
 
   if (loading) {
-    return <LoadingState message="Loading your GitHub repositories..." />;
+    return <RepositoriesSkeleton />;
+  }
+
+  if (pageError) {
+    return <PageErrorState onRetry={loadRepositories} />;
   }
 
   const unconnectedAvailable = available.filter(

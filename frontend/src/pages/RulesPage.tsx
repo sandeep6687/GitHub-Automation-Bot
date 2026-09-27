@@ -5,7 +5,7 @@ import { repositoryApi } from '../api/repositoryApi';
 import { ruleApi } from '../api/ruleApi';
 import { RuleCard } from '../components/RuleCard';
 import { RuleForm } from '../components/RuleForm';
-import { LoadingState } from '../components/LoadingState';
+import { RulesSkeleton, PageErrorState } from '../components/Skeleton';
 
 interface RulesPageProps {
   initialRepoId?: string | null;
@@ -16,6 +16,7 @@ export const RulesPage: React.FC<RulesPageProps> = ({ initialRepoId }) => {
   const [selectedRepoId, setSelectedRepoId] = useState<string>(initialRepoId || '');
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState(false);
   const [isCreatingOrEditing, setIsCreatingOrEditing] = useState(false);
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -41,29 +42,41 @@ export const RulesPage: React.FC<RulesPageProps> = ({ initialRepoId }) => {
   }, [selectedRepoId]);
 
   const loadRepositories = async () => {
+    setLoading(true);
+    setPageError(false);
     try {
       const data = await repositoryApi.getConnectedRepositories();
       setRepos(data);
       if (!selectedRepoId && data.length > 0) {
         setSelectedRepoId(data[0].id);
+      } else if (data.length === 0) {
+        setLoading(false); // No repos, stop loading to show "No Repos" message
       }
     } catch (err: any) {
-      setFeedback({ message: err.message || 'Failed to load repositories', type: 'error' });
-    } finally {
+      setPageError(true);
       setLoading(false);
     }
   };
 
   const loadRules = async (repoId: string) => {
     setLoading(true);
+    setPageError(false);
     setFeedback(null);
     try {
       const data = await ruleApi.getRules(repoId);
       setRules(data);
     } catch (err: any) {
-      setFeedback({ message: err.message || 'Failed to load rules', type: 'error' });
+      setPageError(true);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRetry = () => {
+    if (!repos.length) {
+      loadRepositories();
+    } else if (selectedRepoId) {
+      loadRules(selectedRepoId);
     }
   };
 
@@ -114,8 +127,12 @@ export const RulesPage: React.FC<RulesPageProps> = ({ initialRepoId }) => {
     }
   };
 
-  if (loading && repos.length === 0) {
-    return <LoadingState message="Loading automation rules..." />;
+  if (loading) {
+    return <RulesSkeleton />;
+  }
+
+  if (pageError) {
+    return <PageErrorState onRetry={handleRetry} />;
   }
 
   if (repos.length === 0) {

@@ -4,7 +4,7 @@ import type { ActivityEvent } from '../types/activity';
 import { repositoryApi } from '../api/repositoryApi';
 import { activityApi } from '../api/activityApi';
 import { ActivityTable } from '../components/ActivityTable';
-import { LoadingState } from '../components/LoadingState';
+import { ActivitySkeleton, PageErrorState } from '../components/Skeleton';
 
 interface ActivityPageProps {
   initialRepoId?: string | null;
@@ -15,6 +15,7 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ initialRepoId }) => 
   const [selectedRepoId, setSelectedRepoId] = useState<string>(initialRepoId || '');
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [eventTypeFilter, setEventTypeFilter] = useState<string>('');
@@ -28,14 +29,18 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ initialRepoId }) => 
   }, []);
 
   const loadRepositories = async () => {
+    setLoading(true);
+    setPageError(false);
     try {
       const data = await repositoryApi.getConnectedRepositories();
       setRepos(data);
       if (!selectedRepoId && data.length > 0) {
         setSelectedRepoId(data[0].id);
+      } else if (data.length === 0) {
+        setLoading(false);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load repositories');
+      setPageError(true);
       setLoading(false);
     }
   };
@@ -48,6 +53,7 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ initialRepoId }) => 
       setLoading(true);
     }
     setError(null);
+    setPageError(false);
 
     try {
       const res = await activityApi.getActivity(selectedRepoId, {
@@ -57,9 +63,15 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ initialRepoId }) => 
       });
       setEvents(res.items);
     } catch (err: any) {
-      setError(err.message || 'Failed to load activity');
+      if (isBackground) {
+        setError(err.message || 'Failed to refresh activity');
+      } else {
+        setPageError(true);
+      }
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
       setIsRefreshing(false);
     }
   }, [selectedRepoId, statusFilter, eventTypeFilter]);
@@ -70,7 +82,6 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ initialRepoId }) => 
       fetchActivity(false);
     } else {
       setEvents([]);
-      setLoading(false);
     }
   }, [selectedRepoId, statusFilter, eventTypeFilter, fetchActivity]);
 
@@ -96,8 +107,20 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ initialRepoId }) => 
     };
   }, [autoRefresh, selectedRepoId, fetchActivity]);
 
-  if (loading && repos.length === 0) {
-    return <LoadingState message="Loading activity history..." />;
+  const handleRetry = () => {
+    if (!repos.length) {
+      loadRepositories();
+    } else if (selectedRepoId) {
+      fetchActivity(false);
+    }
+  };
+
+  if (loading) {
+    return <ActivitySkeleton />;
+  }
+
+  if (pageError) {
+    return <PageErrorState onRetry={handleRetry} />;
   }
 
   if (repos.length === 0) {
