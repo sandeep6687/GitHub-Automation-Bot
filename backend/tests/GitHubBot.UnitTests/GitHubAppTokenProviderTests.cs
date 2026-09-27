@@ -170,4 +170,25 @@ public class GitHubAppTokenProviderTests
         var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
         await Assert.ThrowsAsync<HttpRequestException>(() => provider.TryGetGitHubAppInstallationIdAsync("owner", "repo"));
     }
+
+    [Fact]
+    public async Task TryGetGitHubAppInstallationIdAsync_ShouldNotThrowObjectDisposedException_OnSuccessiveCalls()
+    {
+        _httpMessageHandlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() => new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.NotFound // Returns null but invokes GenerateGitHubAppJwt
+            });
+
+        var provider = new GitHubAppTokenProvider(_httpClient, _memoryCache, _optionsMock.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<GitHubAppTokenProvider>.Instance);
+        
+        // Call once - this caches the signature provider if not disabled
+        await provider.TryGetGitHubAppInstallationIdAsync("owner", "repo1");
+        
+        // Call twice - this throws ObjectDisposedException if signature provider is cached and RSA disposed
+        var exception = await Record.ExceptionAsync(() => provider.TryGetGitHubAppInstallationIdAsync("owner", "repo2"));
+        
+        Assert.Null(exception);
+    }
 }

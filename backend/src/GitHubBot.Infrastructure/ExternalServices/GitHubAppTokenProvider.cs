@@ -172,7 +172,10 @@ public class GitHubAppTokenProvider : IGitHubAppTokenProvider
         }
 
         var securityKey = new RsaSecurityKey(rsa);
-        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.RsaSha256);
+        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.RsaSha256)
+        {
+            CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
+        };
 
         var now = DateTime.UtcNow;
         
