@@ -5,6 +5,7 @@ import { repositoryApi } from '../api/repositoryApi';
 import { activityApi } from '../api/activityApi';
 import { ActivityTable } from '../components/ActivityTable';
 import { ActivitySkeleton, PageErrorState } from '../components/Skeleton';
+import { LoadingState } from '../components/LoadingState';
 
 interface ActivityPageProps {
   initialRepoId?: string | null;

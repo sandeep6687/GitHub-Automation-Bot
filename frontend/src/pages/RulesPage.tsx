@@ -6,6 +6,7 @@ import { ruleApi } from '../api/ruleApi';
 import { RuleCard } from '../components/RuleCard';
 import { RuleForm } from '../components/RuleForm';
 import { RulesSkeleton, PageErrorState } from '../components/Skeleton';
+import { LoadingState } from '../components/LoadingState';
 
 interface RulesPageProps {
   initialRepoId?: string | null;
