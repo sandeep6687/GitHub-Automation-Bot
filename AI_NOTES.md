@@ -34,3 +34,4 @@ During Phase 14, the AI was tasked with implementing GitHub App authentication d
 ## 5. What would be improved with more time
 - **Abstracting the Database Provider**: We are tightly coupled to PostgreSQL currently. More time would allow abstracting EF Core configurations to seamlessly swap between SQLite (for local devs) and Postgres.
 - **Enhanced AI Analytics**: Currently, AI is used solely for triage text generation. With more time, we'd implement vector embeddings to allow the bot to identify duplicate issues based on semantic similarity to past issues.
+- A future extension would enable AI-assisted pull-request review, with automated approval gated by explicit repository policies and deterministic checks.
