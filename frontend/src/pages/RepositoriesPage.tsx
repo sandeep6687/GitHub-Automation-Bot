@@ -19,7 +19,7 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
   const [connected, setConnected] = useState<ConnectedRepository[]>([]);
   const [available, setAvailable] = useState<AvailableRepository[]>([]);
   const [processingId, setProcessingId] = useState<string | number | null>(null);
-  const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [feedback, setFeedback] = useState<{ message: React.ReactNode; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     loadRepositories();
@@ -60,7 +60,38 @@ export const RepositoriesPage: React.FC<RepositoriesPageProps> = ({
       setConnected(connectedData);
       setAvailable(availableData);
     } catch (err: any) {
-      setFeedback({ message: err.message || 'Failed to connect repository', type: 'error' });
+      const errorMessage = err.message || 'Failed to connect repository';
+      
+      if (errorMessage.includes('GitHub App does not have permission') || errorMessage.includes('install the GitHub App')) {
+        setFeedback({ 
+          message: (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
+              <strong style={{ fontSize: '1rem' }}>GitHub App installation required</strong>
+              <p style={{ margin: 0 }}>Event Automation Bot needs access to this repository before it can be connected.</p>
+              <div style={{ margin: '0.5rem 0' }}>
+                <a 
+                  href="https://github.com/apps/event-automation-bot/installations/new" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="btn btn-primary btn-sm"
+                  style={{ textDecoration: 'none' }}
+                  aria-label="Install Event Automation Bot in a new window"
+                >
+                  Install Event Automation Bot
+                </a>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.875rem' }}>After installation, return here and click Connect again.</p>
+              <details style={{ marginTop: '0.5rem', fontSize: '0.75rem', opacity: 0.8 }}>
+                <summary style={{ cursor: 'pointer' }}>Error details</summary>
+                <div style={{ marginTop: '0.25rem' }}>{errorMessage}</div>
+              </details>
+            </div>
+          ), 
+          type: 'error' 
+        });
+      } else {
+        setFeedback({ message: errorMessage, type: 'error' });
+      }
     } finally {
       setProcessingId(null);
     }

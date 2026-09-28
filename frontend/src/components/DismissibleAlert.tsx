@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 interface DismissibleAlertProps {
-  message: string;
+  message: React.ReactNode;
   type?: 'success' | 'error' | 'warning' | 'info';
   onDismiss?: () => void;
 }
